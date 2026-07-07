@@ -322,6 +322,8 @@
 
   /* chart */
   .chart-card{padding-bottom: 10px;}
+  .chart-legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11.5px; color:var(--ink-soft); margin-bottom:10px;}
+  .chart-legend .dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:5px;}
   .chart-bars{
     display:flex;
     align-items:flex-end;
@@ -339,6 +341,7 @@
     height:100%;
     gap:6px;
   }
+  .bar-pair{display:flex; align-items:flex-end; justify-content:center; gap:4px; height:100%; width:100%;}
   .bar{
     width: 100%;
     max-width: 34px;
@@ -346,6 +349,7 @@
     border-radius: 5px 5px 3px 3px;
     min-height: 3px;
   }
+  .bar-pair .bar{max-width:16px;}
   .bar-label{font-size:10.5px; color: var(--ink-soft); font-family:'IBM Plex Mono',monospace;}
 
   /* holdings performance table */
@@ -355,13 +359,15 @@
   .holdings-name{display:flex; align-items:center; gap:6px; font-family:'Inter', sans-serif; font-weight:500;}
   .sparkline-cell{display:flex; justify-content:flex-end;}
 
-  /* pie / donut chart */
-  .pie-tabs{display:flex; gap:8px; margin-bottom:16px;}
-  .pie-tab{
+  /* generic tab row (used by entry form + category pie chart) */
+  .tab-row{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
+  .tab-btn{
     background: var(--bg); border:1px solid var(--border); color:var(--ink-soft);
     font-size:12.5px; font-weight:600; padding:6px 14px; border-radius:20px; cursor:pointer;
   }
-  .pie-tab.active{background:var(--ink); color:#fff; border-color:var(--ink);}
+  .tab-btn.active{background:var(--ink); color:#fff; border-color:var(--ink);}
+
+  /* pie / donut chart */
   .pie-wrap{display:flex; gap:28px; align-items:center; flex-wrap:wrap;}
   .donut{
     position:relative;
@@ -471,7 +477,7 @@
   </div>
 
   <section>
-    <div class="section-title"><span class="n">00</span> 카테고리 설정</div>
+    <div class="section-title">카테고리 설정</div>
     <div class="card cat-groups">
       <div class="cat-group">
         <div class="cat-group-label">보유자 목록</div>
@@ -514,7 +520,7 @@
   </section>
 
   <section>
-    <div class="section-title"><span class="n">01</span> 이번 달 입력</div>
+    <div class="section-title">월 별 입력</div>
     <div class="card">
       <form class="entry-form" id="entryForm">
         <div class="income-row">
@@ -528,18 +534,32 @@
           </div>
         </div>
 
-        <div>
-          <div class="field-group-title"><span class="dot expense"></span>소비</div>
+        <div class="tab-row" id="entryTabs"></div>
+
+        <div class="entry-tab-panel" data-tab="expense">
           <div class="field-grid" id="gridExpense"></div>
         </div>
-        <div>
-          <div class="field-group-title"><span class="dot savings"></span>저축</div>
+        <div class="entry-tab-panel" data-tab="savings">
           <div class="field-grid" id="gridSavings"></div>
         </div>
-        <div>
-          <div class="field-group-title"><span class="dot invest"></span>투자 (오늘 현재가)</div>
-          <div style="font-size:11.5px; color:var(--ink-soft); margin:-6px 0 10px;">산 금액이 아니라, 오늘 기준 그 종목의 1주당 현재가(원)를 적어주세요. 평가금액·수익률은 보유수량과 매입단가로 자동 계산돼요.</div>
-          <div class="field-grid" id="gridInvest"></div>
+        <div class="entry-tab-panel" data-tab="invest">
+          <div class="holdings-note">보유수량 × 오늘 현재가 기준으로 평가금액·수익률이 자동 계산돼요. 현재가만 입력해주세요.</div>
+          <div style="overflow-x:auto;">
+            <table class="holdings-table">
+              <thead>
+                <tr>
+                  <th>종목</th>
+                  <th>보유수량</th>
+                  <th>매입단가</th>
+                  <th>현재가</th>
+                  <th>평가금액</th>
+                  <th>수익률</th>
+                  <th>추이</th>
+                </tr>
+              </thead>
+              <tbody id="holdingsBody"></tbody>
+            </table>
+          </div>
         </div>
 
         <div class="form-actions">
@@ -550,43 +570,25 @@
     </div>
   </section>
 
-  <section>
-    <div class="section-title"><span class="n">02</span> 종목별 수익률</div>
-    <div class="card">
-      <div class="holdings-note">보유수량 × 오늘 현재가 기준으로 계산돼요. 매달 현재가만 입력하면 여기서 자동 갱신돼요.</div>
-      <div style="overflow-x:auto;">
-        <table class="holdings-table">
-          <thead>
-            <tr>
-              <th>종목</th>
-              <th>보유수량</th>
-              <th>매입단가</th>
-              <th>현재가</th>
-              <th>평가금액</th>
-              <th>수익률</th>
-              <th>추이</th>
-            </tr>
-          </thead>
-          <tbody id="holdingsBody"></tbody>
-        </table>
-      </div>
-    </div>
-  </section>
-
   <section class="chart-card">
-    <div class="section-title"><span class="n">03</span> 월별 순증가 추이</div>
+    <div class="section-title">월 별 추이</div>
     <div class="card">
+      <div class="chart-legend">
+        <span><span class="dot" style="background:var(--teal);"></span>저축</span>
+        <span><span class="dot" style="background:var(--gold);"></span>투자 증가</span>
+        <span><span class="dot" style="background:var(--coral);"></span>투자 감소</span>
+      </div>
       <div class="chart-bars" id="chartBars"></div>
     </div>
   </section>
 
   <section>
     <div class="section-title">
-      <span class="n">04</span> 카테고리 비중
+      카테고리 별 비중
       <select class="pie-month-select" id="pieMonthSelect"></select>
     </div>
     <div class="card">
-      <div class="pie-tabs" id="pieTabs"></div>
+      <div class="tab-row" id="pieTabs"></div>
       <div class="pie-wrap">
         <div class="donut" id="donutChart"></div>
         <div class="pie-legend" id="pieLegend"></div>
@@ -595,7 +597,7 @@
   </section>
 
   <section>
-    <div class="section-title"><span class="n">05</span> 히스토리</div>
+    <div class="section-title">월 별 히스토리</div>
     <div class="card" style="padding: 8px 16px 16px;">
       <table>
         <thead>
@@ -603,8 +605,8 @@
             <th>월</th>
             <th>수입</th>
             <th>소비</th>
-            <th>순증가</th>
-            <th>저축률</th>
+            <th>저축</th>
+            <th>투자</th>
             <th></th>
             <th></th>
             <th></th>
@@ -637,7 +639,7 @@ const STORAGE_KEY = 'home-budget-data-v2';
 const DEFAULT_DATA = {
   baseAsset: 54000,   // 5.4억 in 만원
   targetAsset: 85000, // 8.5억 in 만원
-  owners: ['공동', '나', '남편'],
+  owners: ['공동'],
   categories: {
     expense: [],
     savings: [],
@@ -665,6 +667,7 @@ const OWNER_PALETTE = [
 let state = JSON.parse(JSON.stringify(DEFAULT_DATA));
 let expandedMonths = new Set();
 let pieGroup = 'expense';
+let entryTab = 'expense';
 
 function formatManwon(v){
   const n = Math.round(v);
@@ -893,8 +896,12 @@ document.addEventListener('change', async (ev) => {
   if (val > 0) state.budgets[group][cat] = val;
   else delete state.budgets[group][cat];
   await saveData();
-  const containerId = { expense:'gridExpense', savings:'gridSavings', invest:'gridInvest' }[group];
-  reRenderFormGridPreserving(group, containerId);
+  if (group === 'invest'){
+    reRenderHoldingsPreserving();
+  } else {
+    const containerId = { expense:'gridExpense', savings:'gridSavings' }[group];
+    reRenderFormGridPreserving(group, containerId);
+  }
 });
 
 async function addCategory(group){
@@ -912,7 +919,6 @@ async function addCategory(group){
   input.value = '';
   await saveData();
   renderAll();
-  renderHoldings();
   showToast(`"${name}" 카테고리를 추가했어요`);
 }
 window.addCategory = addCategory;
@@ -939,7 +945,6 @@ async function addInvestCategory(){
   costInput.value = '';
   await saveData();
   renderAll();
-  renderHoldings();
   showToast(`"${name}" 종목을 추가했어요`);
 }
 window.addInvestCategory = addInvestCategory;
@@ -948,7 +953,6 @@ async function removeCategory(group, name){
   state.categories[group] = state.categories[group].filter(c => c.name !== name);
   await saveData();
   renderAll();
-  renderHoldings();
   showToast(`"${name}" 카테고리를 삭제했어요`);
 }
 window.removeCategory = removeCategory;
@@ -960,28 +964,14 @@ function renderFormGrid(group, containerId){
     el.innerHTML = `<div style="font-size:12.5px; color:#9AA2AD;">위 "카테고리 설정"에서 항목을 먼저 추가해주세요.</div>`;
     return;
   }
-  if (group === 'invest'){
-    el.innerHTML = state.categories.invest.map(cat => {
-      const budget = (state.budgets?.invest || {})[cat.name];
-      const hints = [`매입가 ${formatWon(cat.costBasis)}`];
-      if (budget) hints.push(`목표가 ${formatWon(budget)}`);
-      return `
-      <div class="field">
-        <label>${cat.name} ${ownerTagHTML(cat.owner)}</label>
-        <input type="number" min="0" placeholder="현재가(원)" data-group="invest" data-cat="${cat.name.replace(/"/g, '&quot;')}">
-        <div class="hint">${hints.join(' · ')}</div>
-      </div>`;
-    }).join('');
-    return;
-  }
   const budgetLabel = group === 'expense' ? '예산' : '목표';
   el.innerHTML = state.categories[group].map(cat => {
-    const budget = (state.budgets?.[group] || {})[cat.name];
+    const budget = (state.budgets?.[group] || {})[cat.name] || 0;
     return `
     <div class="field">
       <label>${cat.name} ${ownerTagHTML(cat.owner)}</label>
-      <input type="number" min="0" placeholder="0" data-group="${group}" data-cat="${cat.name.replace(/"/g, '&quot;')}">
-      ${budget ? `<div class="hint">${budgetLabel} ${formatManwon(budget)}</div>` : ''}
+      <input type="number" min="0" placeholder="0" data-group="${group}" data-cat="${cat.name.replace(/"/g, '&quot;')}" data-budget="${budget}">
+      <div class="hint">${budget ? `${budgetLabel} ${formatManwon(budget)}` : ''}</div>
     </div>`;
   }).join('');
 }
@@ -1002,6 +992,24 @@ function applyBudgetStyle(inp){
   }
 }
 
+// 소비/저축 탭에서 예산·목표 대비 이번 달 잔여 금액을 실시간으로 보여준다.
+function updateBudgetRemaining(inp){
+  if (inp.dataset.group !== 'expense' && inp.dataset.group !== 'savings') return;
+  const hintEl = inp.parentElement.querySelector('.hint');
+  if (!hintEl) return;
+  const budget = Number(inp.dataset.budget) || 0;
+  const budgetLabel = inp.dataset.group === 'expense' ? '예산' : '목표';
+  if (!budget){ hintEl.textContent = ''; return; }
+  const entered = Number(inp.value) || 0;
+  const remaining = budget - entered;
+  const pct = Math.abs(remaining / budget * 100);
+  const remainText = remaining >= 0
+    ? `잔여 ${formatManwon(remaining)} (${pct.toFixed(0)}%)`
+    : `${formatManwon(Math.abs(remaining))} 초과 (${pct.toFixed(0)}%)`;
+  const color = remaining >= 0 ? 'var(--ink-soft)' : 'var(--coral)';
+  hintEl.innerHTML = `${budgetLabel} ${formatManwon(budget)} · <span style="color:${color};">${remainText}</span>`;
+}
+
 function reRenderFormGridPreserving(group, containerId){
   const el = document.getElementById(containerId);
   const prevValues = {};
@@ -1009,13 +1017,27 @@ function reRenderFormGridPreserving(group, containerId){
   renderFormGrid(group, containerId);
   el.querySelectorAll('input[data-cat]').forEach(inp => {
     if (prevValues[inp.dataset.cat] !== undefined) inp.value = prevValues[inp.dataset.cat];
-    inp.addEventListener('input', () => { updateSavingsPreview(); applyBudgetStyle(inp); });
+    inp.addEventListener('input', () => { updateSavingsPreview(); applyBudgetStyle(inp); updateBudgetRemaining(inp); });
     applyBudgetStyle(inp);
+    updateBudgetRemaining(inp);
+  });
+}
+
+function reRenderHoldingsPreserving(){
+  const body = document.getElementById('holdingsBody');
+  const prevValues = {};
+  body.querySelectorAll('input[data-cat]').forEach(inp => { prevValues[inp.dataset.cat] = inp.value; });
+  renderHoldings();
+  body.querySelectorAll('input[data-cat]').forEach(inp => {
+    if (prevValues[inp.dataset.cat] !== undefined) inp.value = prevValues[inp.dataset.cat];
+    inp.addEventListener('input', () => { updateSavingsPreview(); applyBudgetStyle(inp); updateHoldingLive(inp); });
+    applyBudgetStyle(inp);
+    updateHoldingLive(inp);
   });
 }
 
 function collectFormGroup(group){
-  const inputs = document.querySelectorAll(`#gridExpense input, #gridSavings input, #gridInvest input`);
+  const inputs = document.querySelectorAll('.entry-form input[data-group]');
   const out = {};
   inputs.forEach(inp => {
     if (inp.dataset.group === group){
@@ -1045,6 +1067,27 @@ function updateSavingsPreview(){
     `이번 달 순증가 <b>${formatManwon(total)}</b> (저축 ${formatManwon(savings)} · 투자 ${deltaSign}${formatManwon(Math.abs(investDelta))}) · 저축률 <b>${rate}${rate === '-' ? '' : '%'}</b>`;
 }
 
+function renderEntryTabs(){
+  const el = document.getElementById('entryTabs');
+  const labels = { expense: '소비', savings: '저축', invest: '투자' };
+  el.innerHTML = Object.keys(labels).map(g =>
+    `<button type="button" class="tab-btn ${g === entryTab ? 'active' : ''}" data-tab="${g}">${labels[g]}</button>`
+  ).join('');
+  el.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      entryTab = btn.dataset.tab;
+      renderEntryTabs();
+      updateEntryTabVisibility();
+    });
+  });
+}
+
+function updateEntryTabVisibility(){
+  document.querySelectorAll('.entry-tab-panel').forEach(panel => {
+    panel.style.display = panel.dataset.tab === entryTab ? '' : 'none';
+  });
+}
+
 function renderAll(){
   renderOwnerChips();
   renderOwnerSelects();
@@ -1053,13 +1096,19 @@ function renderAll(){
   renderChips('invest', 'chipsInvest');
   renderFormGrid('expense', 'gridExpense');
   renderFormGrid('savings', 'gridSavings');
-  renderFormGrid('invest', 'gridInvest');
+  renderHoldings();
+  renderEntryTabs();
+  updateEntryTabVisibility();
   document.querySelectorAll('.entry-form input[type=number]').forEach(inp => {
     inp.addEventListener('input', () => {
       updateSavingsPreview();
       applyBudgetStyle(inp);
+      updateBudgetRemaining(inp);
+      updateHoldingLive(inp);
     });
     applyBudgetStyle(inp);
+    updateBudgetRemaining(inp);
+    updateHoldingLive(inp);
   });
   updateSavingsPreview();
 }
@@ -1103,7 +1152,6 @@ function render(){
   renderHistory();
   renderChart();
   renderPie();
-  renderHoldings();
 }
 
 function buildSparkline(values){
@@ -1130,37 +1178,105 @@ function buildSparkline(values){
   </svg>`;
 }
 
+function holdingPriceHistory(cat, sorted){
+  return sorted
+    .filter(e => e.invest && e.invest[cat.name] !== undefined && e.invest[cat.name] !== '' && e.invest[cat.name] !== null)
+    .map(e => ({ month: e.month, price: Number(e.invest[cat.name]) }));
+}
+
+function renderHoldingMetrics(row, cat, price){
+  const hasPrice = price !== null && price !== undefined && price !== '' && !isNaN(price) && Number(price) > 0;
+  const evalCell = row.querySelector('.eval-cell');
+  const returnCell = row.querySelector('.return-cell');
+  if (!hasPrice){
+    evalCell.textContent = '-';
+    returnCell.textContent = '-';
+    return;
+  }
+  const p = Number(price);
+  const evalAmt = investEval(cat, p);
+  const returnPct = cat.costBasis > 0 ? (p - cat.costBasis) / cat.costBasis * 100 : null;
+  evalCell.textContent = formatManwon(evalAmt);
+  if (returnPct === null){
+    returnCell.textContent = '-';
+  } else {
+    const pillClass = returnPct >= 0 ? 'good' : 'low';
+    returnCell.innerHTML = `<span class="rate-pill ${pillClass}">${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(1)}%</span>`;
+  }
+}
+
+function updateHoldingLive(inp){
+  if (inp.dataset.group !== 'invest') return;
+  const row = inp.closest('tr');
+  if (!row) return;
+  const cat = getCatDef('invest', inp.dataset.cat);
+  if (!cat) return;
+  renderHoldingMetrics(row, cat, inp.value);
+}
+
+let expandedHoldings = new Set();
+
+function toggleHoldingDetail(name){
+  if (expandedHoldings.has(name)) expandedHoldings.delete(name);
+  else expandedHoldings.add(name);
+  reRenderHoldingsPreserving();
+}
+window.toggleHoldingDetail = toggleHoldingDetail;
+
 function renderHoldings(){
   const body = document.getElementById('holdingsBody');
   const holdings = state.categories.invest;
   if (holdings.length === 0){
-    body.innerHTML = `<tr class="empty-row"><td colspan="7">아직 등록된 종목이 없어요. "00 카테고리 설정"에서 추가해보세요.</td></tr>`;
+    body.innerHTML = `<tr class="empty-row"><td colspan="7">아직 등록된 종목이 없어요. "카테고리 설정"에서 추가해보세요.</td></tr>`;
     return;
   }
   const sorted = sortedEntries();
-  body.innerHTML = holdings.map(cat => {
-    const priceHistory = sorted
-      .filter(e => e.invest && e.invest[cat.name] !== undefined && e.invest[cat.name] !== '' && e.invest[cat.name] !== null)
-      .map(e => Number(e.invest[cat.name]));
+  let rows = '';
+  holdings.forEach(cat => {
+    const history = holdingPriceHistory(cat, sorted);
     const returnHistory = cat.costBasis > 0
-      ? priceHistory.map(p => (p - cat.costBasis) / cat.costBasis * 100)
+      ? history.map(h => (h.price - cat.costBasis) / cat.costBasis * 100)
       : [];
-    const latestPrice = priceHistory.length ? priceHistory[priceHistory.length - 1] : null;
+    const latestPrice = history.length ? history[history.length - 1].price : null;
     const evalAmt = latestPrice !== null ? investEval(cat, latestPrice) : null;
     const returnPct = (latestPrice !== null && cat.costBasis > 0)
       ? (latestPrice - cat.costBasis) / cat.costBasis * 100
       : null;
     const pillClass = returnPct === null ? '' : (returnPct >= 0 ? 'good' : 'low');
-    return `<tr>
-      <td class="holdings-name">${cat.name} ${ownerTagHTML(cat.owner)}</td>
+    const isExpanded = expandedHoldings.has(cat.name);
+    rows += `<tr>
+      <td class="holdings-name">
+        <button class="expand-btn" style="font-size:12px; padding:0 4px;" onclick="toggleHoldingDetail('${cat.name.replace(/'/g, "\\'")}')">${isExpanded ? '▲' : '▼'}</button>
+        ${cat.name} ${ownerTagHTML(cat.owner)}
+      </td>
       <td>${Number(cat.shares) || 0}주</td>
       <td>${formatWon(cat.costBasis)}</td>
-      <td>${latestPrice !== null ? formatWon(latestPrice) : '-'}</td>
-      <td>${evalAmt !== null ? formatManwon(evalAmt) : '-'}</td>
-      <td>${returnPct !== null ? `<span class="rate-pill ${pillClass}">${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(1)}%</span>` : '-'}</td>
+      <td><input type="number" min="0" placeholder="현재가(원)" data-group="invest" data-cat="${cat.name.replace(/"/g, '&quot;')}"></td>
+      <td class="eval-cell">${evalAmt !== null ? formatManwon(evalAmt) : '-'}</td>
+      <td class="return-cell">${returnPct !== null ? `<span class="rate-pill ${pillClass}">${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(1)}%</span>` : '-'}</td>
       <td><div class="sparkline-cell">${buildSparkline(returnHistory)}</div></td>
     </tr>`;
-  }).join('');
+    if (isExpanded){
+      const monthRows = history.map(h => {
+        const evalAmt2 = investEval(cat, h.price);
+        const ret2 = cat.costBasis > 0 ? (h.price - cat.costBasis) / cat.costBasis * 100 : null;
+        const pillClass2 = ret2 === null ? '' : (ret2 >= 0 ? 'good' : 'low');
+        return `<tr>
+          <td class="month">${monthLabel(h.month)}</td>
+          <td>${formatWon(h.price)}</td>
+          <td>${formatManwon(evalAmt2)}</td>
+          <td>${ret2 !== null ? `<span class="rate-pill ${pillClass2}">${ret2 >= 0 ? '+' : ''}${ret2.toFixed(1)}%</span>` : '-'}</td>
+        </tr>`;
+      }).join('');
+      rows += `<tr class="detail-row"><td colspan="7">
+        <table>
+          <thead><tr><th>월</th><th>현재가</th><th>평가금액</th><th>수익률</th></tr></thead>
+          <tbody>${monthRows || '<tr class="empty-row"><td colspan="4">기록 없음</td></tr>'}</tbody>
+        </table>
+      </td></tr>`;
+    }
+  });
+  body.innerHTML = rows;
 }
 
 function renderHistory(){
@@ -1173,16 +1289,15 @@ function renderHistory(){
   let rows = '';
   sorted.forEach((e, idx) => {
     const expenseTotal = sumGroup(e.expense);
-    const netTotal = netContributionFor(sorted, idx);
-    const rate = e.income > 0 ? (netTotal / e.income * 100) : 0;
-    const pillClass = rate >= 30 ? 'good' : 'low';
+    const savingsTotal = sumGroup(e.savings);
+    const investTotal = investTotalForEntry(e.invest);
     const isExpanded = expandedMonths.has(e.month);
     rows += `<tr>
       <td class="month">${monthLabel(e.month)}</td>
       <td>${formatManwon(e.income)}</td>
       <td>${formatManwon(expenseTotal)}</td>
-      <td>${formatManwon(netTotal)}</td>
-      <td><span class="rate-pill ${pillClass}">${rate.toFixed(0)}%</span></td>
+      <td>${formatManwon(savingsTotal)}</td>
+      <td>${formatManwon(investTotal)}</td>
       <td><button class="ghost" style="padding:4px 10px; font-size:11.5px;" onclick="editEntry('${e.month}')">수정</button></td>
       <td><button class="expand-btn" onclick="toggleDetail('${e.month}')">${isExpanded ? '▲' : '▼'}</button></td>
       <td><button class="danger-ghost" onclick="deleteEntry('${e.month}')">삭제</button></td>
@@ -1249,15 +1364,22 @@ function renderChart(){
   const sorted = sortedEntries();
   const startIdx = Math.max(0, sorted.length - 8);
   const displayed = sorted.slice(startIdx);
-  const totals = displayed.map((e, i) => netContributionFor(sorted, startIdx + i));
-  const maxAbs = Math.max(...totals.map(t => Math.abs(t)), 1);
+  const savingsVals = displayed.map(e => sumGroup(e.savings));
+  const investVals = displayed.map((e, i) => investDeltaFor(sorted, startIdx + i));
+  const maxAbs = Math.max(...savingsVals.map(Math.abs), ...investVals.map(Math.abs), 1);
   el.innerHTML = displayed.map((e, i) => {
-    const total = totals[i];
-    const isNeg = total < 0;
-    const h = Math.max(3, (Math.abs(total)/maxAbs) * 120);
-    const barStyle = isNeg ? `height:${h}px; background: linear-gradient(180deg, var(--coral) 0%, #E28468 100%);` : `height:${h}px;`;
+    const sv = savingsVals[i];
+    const iv = investVals[i];
+    const sh = sv === 0 ? 0 : Math.max(3, (Math.abs(sv)/maxAbs) * 120);
+    const ih = iv === 0 ? 0 : Math.max(3, (Math.abs(iv)/maxAbs) * 120);
+    const investBg = iv < 0
+      ? 'background: linear-gradient(180deg, var(--coral) 0%, #E28468 100%);'
+      : 'background: linear-gradient(180deg, var(--gold) 0%, #D9B66A 100%);';
     return `<div class="bar-col">
-      <div class="bar" style="${barStyle}" title="${isNeg ? '-' : '+'}${formatManwon(Math.abs(total))}"></div>
+      <div class="bar-pair">
+        <div class="bar" style="height:${sh}px; background: linear-gradient(180deg, var(--teal) 0%, #6FA79B 100%);" title="저축 ${formatManwon(sv)}"></div>
+        <div class="bar" style="height:${ih}px; ${investBg}" title="투자 ${iv >= 0 ? '+' : '-'}${formatManwon(Math.abs(iv))}"></div>
+      </div>
       <div class="bar-label">${monthLabel(e.month)}</div>
     </div>`;
   }).join('');
@@ -1282,9 +1404,9 @@ function renderPieTabs(){
   const el = document.getElementById('pieTabs');
   const labels = { expense:'소비', savings:'저축', invest:'투자' };
   el.innerHTML = Object.keys(labels).map(g =>
-    `<button type="button" class="pie-tab ${g === pieGroup ? 'active' : ''}" data-group="${g}">${labels[g]}</button>`
+    `<button type="button" class="tab-btn ${g === pieGroup ? 'active' : ''}" data-group="${g}">${labels[g]}</button>`
   ).join('');
-  el.querySelectorAll('.pie-tab').forEach(btn => {
+  el.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       pieGroup = btn.dataset.group;
       renderPieTabs();
