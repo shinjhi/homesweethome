@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --bg: #F6F3EC;
@@ -436,10 +437,74 @@
     transition: opacity 0.25s ease;
   }
   .toast.show{opacity:1;}
+
+  /* auth */
+  .auth-overlay{
+    position:fixed; inset:0;
+    background:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+    padding:20px; z-index:100;
+  }
+  .auth-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:32px 28px;
+    width:100%; max-width:360px;
+    text-align:center;
+  }
+  .auth-card .eyebrow{justify-content:center;}
+  .auth-card h2{
+    font-family:var(--font-display);
+    font-size:26px; font-weight:700; margin:6px 0 4px;
+  }
+  .auth-card p{color:var(--ink-soft); font-size:13px; margin:0 0 20px;}
+  .auth-card input{
+    width:100%;
+    padding:11px 13px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    font-size:14px;
+    background:var(--bg);
+    margin-bottom:10px;
+  }
+  .auth-card input:focus{outline:2px solid var(--gold-soft); border-color:var(--gold);}
+  .auth-card button.primary{width:100%; margin-top:6px; padding:12px;}
+  .auth-error{color:var(--coral); font-size:12.5px; margin-top:12px; min-height:16px;}
+  .userbar{
+    display:flex; align-items:center; justify-content:flex-end;
+    gap:10px; font-size:12px; color:var(--ink-soft);
+    margin-bottom:10px;
+  }
+  .userbar .sync-dot{width:7px; height:7px; border-radius:50%; background:var(--teal); display:inline-block;}
+  .userbar button{
+    background:transparent; color:var(--ink-soft);
+    border:1px solid var(--border); font-size:11.5px; padding:4px 10px;
+  }
+  .app-hidden{display:none;}
 </style>
 </head>
 <body>
-<div class="wrap">
+
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <div class="eyebrow">Home Sweet Home</div>
+    <h2>JHIJEE HOUSE</h2>
+    <p>가구 공용 가계부 · 로그인이 필요해요</p>
+    <input type="email" id="authEmail" placeholder="이메일" autocomplete="username">
+    <input type="password" id="authPassword" placeholder="비밀번호" autocomplete="current-password">
+    <button class="primary" id="authLoginBtn">로그인</button>
+    <div class="auth-error" id="authError"></div>
+  </div>
+</div>
+
+<div class="wrap app-hidden" id="appWrap">
+
+  <div class="userbar" id="userbar">
+    <span class="sync-dot" title="실시간 동기화 중"></span>
+    <span id="userEmailLabel"></span>
+    <button id="logoutBtn">로그아웃</button>
+  </div>
 
   <header class="top">
     <div class="eyebrow">Home Sweet Home</div>
@@ -667,6 +732,15 @@
 <script>
 const STORAGE_KEY = 'home-budget-data-v2';
 
+// ---- Supabase (실시간 공유 저장소) ----
+const SUPABASE_URL = 'https://xdaipozxwyahtqgoiosr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_rmdHZuCnDyj96UgqYJnN7w_GzC5rkyr';
+const CLOUD_ROW_ID = 'main';
+const sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+let currentUser = null;
+let lastWrittenJson = null;      // 내 저장이 실시간으로 되돌아올 때 무시하기 위한 값
+let realtimeChannel = null;
+
 const DEFAULT_DATA = {
   targetAsset: 85000, // 8.5억 in 만원
   owners: ['공동'],
@@ -767,37 +841,85 @@ function sumGroup(obj){
   return Object.values(obj || {}).reduce((s, v) => s + (Number(v) || 0), 0);
 }
 
-// 브라우저 localStorage에 자동 저장 — 파일이 아니라 링크(호스팅)로 열어도
-// 같은 주소에서는 데이터가 그대로 유지됩니다.
-async function loadData(){
+// 저장된 JSON을 현재 state로 변환 (localStorage / 클라우드 공통)
+function hydrateState(parsed){
+  if (!parsed || typeof parsed !== 'object') return;
+  state = {
+    targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
+    owners: (Array.isArray(parsed.owners) && parsed.owners.length) ? parsed.owners : DEFAULT_DATA.owners,
+    categories: normalizeCategories(parsed.categories),
+    budgets: {
+      expense: parsed.budgets?.expense ?? {},
+      savings: parsed.budgets?.savings ?? {},
+      invest: parsed.budgets?.invest ?? {},
+    },
+    entries: parsed.entries ?? []
+  };
+  expandedMonths = new Set();
+}
+
+// 로그인 전이나 오프라인일 때를 대비한 로컬 백업 로드
+function loadLocalBackup(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw){
-      const parsed = JSON.parse(raw);
-      state = {
-        targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
-        owners: (Array.isArray(parsed.owners) && parsed.owners.length) ? parsed.owners : DEFAULT_DATA.owners,
-        categories: normalizeCategories(parsed.categories),
-        budgets: {
-          expense: parsed.budgets?.expense ?? {},
-          savings: parsed.budgets?.savings ?? {},
-          invest: parsed.budgets?.invest ?? {},
-        },
-        entries: parsed.entries ?? []
-      };
+    if (raw) hydrateState(JSON.parse(raw));
+  }catch(e){ /* 무시 */ }
+}
+
+// 클라우드(Supabase)에서 공용 데이터를 불러온다.
+async function loadFromCloud(){
+  if (!sb || !currentUser){ loadLocalBackup(); render(); return; }
+  try{
+    const { data, error } = await sb.from('household_budget').select('data').eq('id', CLOUD_ROW_ID).single();
+    if (error) throw error;
+    const cloud = data && data.data;
+    if (cloud && Object.keys(cloud).length){
+      hydrateState(cloud);
+    } else {
+      // 클라우드가 비어있으면, 이 기기에 남아있던 로컬 데이터를 올려준다.
+      loadLocalBackup();
+      await saveData();
     }
   }catch(e){
-    // 저장된 데이터가 없거나 형식이 맞지 않으면 기본값 사용
+    showToast('클라우드 불러오기 실패 — 로컬 데이터를 사용해요');
+    loadLocalBackup();
   }
   render();
 }
 
+// 저장: 로컬 백업 + 클라우드 동시 저장
 async function saveData(){
-  try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }catch(e){
-    showToast('저장에 실패했어요. 다시 시도해주세요.');
+  const json = JSON.stringify(state);
+  lastWrittenJson = json;
+  try{ localStorage.setItem(STORAGE_KEY, json); }catch(e){ /* 무시 */ }
+  if (sb && currentUser){
+    try{
+      const { error } = await sb.from('household_budget')
+        .update({ data: state, updated_at: new Date().toISOString(), updated_by: currentUser.email })
+        .eq('id', CLOUD_ROW_ID);
+      if (error) throw error;
+    }catch(e){
+      showToast('클라우드 저장 실패 — 인터넷 연결을 확인해주세요');
+    }
   }
+}
+
+// 다른 기기/사람이 저장하면 실시간으로 반영
+function subscribeRealtime(){
+  if (!sb || realtimeChannel) return;
+  realtimeChannel = sb.channel('household_budget_changes')
+    .on('postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'household_budget', filter: `id=eq.${CLOUD_ROW_ID}` },
+      (payload) => {
+        const incoming = JSON.stringify(payload.new.data);
+        if (incoming === lastWrittenJson) return; // 내가 방금 저장한 것의 메아리 → 무시
+        hydrateState(payload.new.data);
+        lastWrittenJson = incoming;
+        render();
+        const who = payload.new.updated_by || '누군가';
+        showToast(`${who} 님이 업데이트한 최신 데이터로 갱신됐어요`);
+      })
+    .subscribe();
 }
 
 function showToast(msg){
@@ -1638,18 +1760,7 @@ document.getElementById('importFile').addEventListener('change', async (ev) => {
       throw new Error('invalid format');
     }
     if (!confirm('가져온 데이터로 현재 데이터를 덮어쓸까요?')){ return; }
-    state = {
-      targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
-      owners: (Array.isArray(parsed.owners) && parsed.owners.length) ? parsed.owners : DEFAULT_DATA.owners,
-      categories: normalizeCategories(parsed.categories),
-      budgets: {
-        expense: parsed.budgets?.expense ?? {},
-        savings: parsed.budgets?.savings ?? {},
-        invest: parsed.budgets?.invest ?? {},
-      },
-      entries: parsed.entries ?? []
-    };
-    expandedMonths = new Set();
+    hydrateState(parsed);
     await saveData();
     render();
     showToast('데이터를 가져왔어요');
@@ -1695,7 +1806,52 @@ document.getElementById('newOwnerName').addEventListener('keydown', (ev) => {
 
 document.getElementById('fMonth').addEventListener('input', updateSavingsPreview);
 
-loadData();
+// ---- 로그인 / 초기화 ----
+function showLogin(){
+  document.getElementById('authOverlay').style.display = 'flex';
+  document.getElementById('appWrap').classList.add('app-hidden');
+}
+
+async function onLoggedIn(user){
+  currentUser = user;
+  document.getElementById('authOverlay').style.display = 'none';
+  document.getElementById('appWrap').classList.remove('app-hidden');
+  document.getElementById('userEmailLabel').textContent = user.email;
+  await loadFromCloud();
+  subscribeRealtime();
+}
+
+async function doLogin(){
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const errEl = document.getElementById('authError');
+  errEl.textContent = '';
+  if (!email || !password){ errEl.textContent = '이메일과 비밀번호를 입력해주세요.'; return; }
+  if (!sb){ errEl.textContent = '연결에 실패했어요. 새로고침 후 다시 시도해주세요.'; return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error){ errEl.textContent = '로그인 실패: 이메일 또는 비밀번호를 확인해주세요.'; return; }
+  onLoggedIn(data.user);
+}
+
+document.getElementById('authLoginBtn').addEventListener('click', doLogin);
+document.getElementById('authPassword').addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter'){ ev.preventDefault(); doLogin(); }
+});
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  if (realtimeChannel){ sb.removeChannel(realtimeChannel); realtimeChannel = null; }
+  if (sb) await sb.auth.signOut();
+  currentUser = null;
+  showLogin();
+});
+
+async function init(){
+  if (!sb){ showLogin(); return; }
+  const { data: { session } } = await sb.auth.getSession();
+  if (session && session.user){ onLoggedIn(session.user); }
+  else { showLogin(); }
+}
+
+init();
 </script>
 </body>
 </html>
