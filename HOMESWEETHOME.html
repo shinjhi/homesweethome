@@ -127,6 +127,7 @@
     gap:6px;
   }
   .cat-group .cat-group-label .dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
+  .dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
   .dot.expense{background:var(--coral);}
   .dot.savings{background:var(--teal);}
   .dot.invest{background:var(--gold);}
@@ -570,6 +571,31 @@
     </div>
   </section>
 
+  <section>
+    <div class="section-title">
+      예산 현황
+      <select class="pie-month-select" id="budgetMonthSelect"></select>
+    </div>
+    <div class="card">
+      <div class="tab-row" id="budgetOwnerTabs"></div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>카테고리</th>
+              <th>구분</th>
+              <th>예산/목표</th>
+              <th>실적</th>
+              <th>잔여</th>
+              <th>진행률</th>
+            </tr>
+          </thead>
+          <tbody id="budgetStatusBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <section class="chart-card">
     <div class="section-title">월 별 추이</div>
     <div class="card">
@@ -637,7 +663,6 @@
 const STORAGE_KEY = 'home-budget-data-v2';
 
 const DEFAULT_DATA = {
-  baseAsset: 54000,   // 5.4억 in 만원
   targetAsset: 85000, // 8.5억 in 만원
   owners: ['공동'],
   categories: {
@@ -668,6 +693,7 @@ let state = JSON.parse(JSON.stringify(DEFAULT_DATA));
 let expandedMonths = new Set();
 let pieGroup = 'expense';
 let entryTab = 'expense';
+let budgetOwnerFilter = '전체';
 
 function formatManwon(v){
   const n = Math.round(v);
@@ -746,7 +772,6 @@ async function loadData(){
     if (result && result.value){
       const parsed = JSON.parse(result.value);
       state = {
-        baseAsset: parsed.baseAsset ?? DEFAULT_DATA.baseAsset,
         targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
         owners: (Array.isArray(parsed.owners) && parsed.owners.length) ? parsed.owners : DEFAULT_DATA.owners,
         categories: normalizeCategories(parsed.categories),
@@ -798,7 +823,7 @@ function currentAsset(){
   const sorted = sortedEntries();
   const savingsCum = sorted.reduce((s,e)=> s + sumGroup(e.savings), 0);
   const investLatest = sorted.length ? investTotalForEntry(sorted[sorted.length-1].invest) : 0;
-  return state.baseAsset + savingsCum + investLatest;
+  return savingsCum + investLatest;
 }
 
 function avgMonthlyContribution(){
@@ -1152,6 +1177,7 @@ function render(){
   renderHistory();
   renderChart();
   renderPie();
+  renderBudgetSection();
 }
 
 function buildSparkline(values){
@@ -1462,6 +1488,83 @@ function renderPie(){
   renderDonut();
 }
 
+function renderBudgetMonthSelect(){
+  const sel = document.getElementById('budgetMonthSelect');
+  const sorted = [...state.entries].sort((a,b)=> b.month.localeCompare(a.month));
+  if (sorted.length === 0){
+    sel.innerHTML = '<option value="">-</option>';
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  const keep = sorted.some(e => e.month === sel.value) ? sel.value : sorted[0].month;
+  sel.innerHTML = sorted.map(e =>
+    `<option value="${e.month}" ${e.month === keep ? 'selected' : ''}>${monthLabel(e.month)}</option>`
+  ).join('');
+}
+
+function renderBudgetOwnerTabs(){
+  const el = document.getElementById('budgetOwnerTabs');
+  const owners = ['전체', ...state.owners];
+  if (!owners.includes(budgetOwnerFilter)) budgetOwnerFilter = '전체';
+  el.innerHTML = owners.map(o =>
+    `<button type="button" class="tab-btn ${o === budgetOwnerFilter ? 'active' : ''}" data-owner="${o}">${o}</button>`
+  ).join('');
+  el.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      budgetOwnerFilter = btn.dataset.owner;
+      renderBudgetOwnerTabs();
+      renderBudgetStatus();
+    });
+  });
+}
+
+function renderBudgetStatus(){
+  const body = document.getElementById('budgetStatusBody');
+  const sel = document.getElementById('budgetMonthSelect');
+  const entry = state.entries.find(e => e.month === sel.value);
+  const groupLabels = { expense: '소비', savings: '저축', invest: '투자' };
+  const rows = [];
+  ['expense', 'savings', 'invest'].forEach(group => {
+    state.categories[group].forEach(cat => {
+      const budget = (state.budgets?.[group] || {})[cat.name];
+      if (!budget) return;
+      const owner = cat.owner || '공동';
+      if (budgetOwnerFilter !== '전체' && owner !== budgetOwnerFilter) return;
+      const raw = entry ? entry[group]?.[cat.name] : undefined;
+      const actual = raw !== undefined && raw !== '' ? Number(raw) : 0;
+      const formatter = group === 'invest' ? formatWon : formatManwon;
+      const remaining = budget - actual;
+      const pct = Math.min(100, Math.max(0, (actual / budget) * 100));
+      const over = group === 'expense' ? actual > budget : actual >= budget;
+      rows.push({ group, cat, owner, budget, actual, remaining, pct, over, formatter });
+    });
+  });
+
+  if (rows.length === 0){
+    body.innerHTML = `<tr class="empty-row"><td colspan="6">예산/목표가 설정된 항목이 없어요. "카테고리 설정"에서 예산·목표를 입력해보세요.</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = rows.map(r => {
+    const pillClass = r.group === 'expense' ? (r.over ? 'low' : 'good') : (r.over ? 'good' : 'low');
+    return `<tr>
+      <td class="month">${r.cat.name} ${ownerTagHTML(r.owner)}</td>
+      <td><span class="dot ${r.group}"></span> ${groupLabels[r.group]}</td>
+      <td>${r.formatter(r.budget)}</td>
+      <td>${r.formatter(r.actual)}</td>
+      <td>${r.remaining < 0 ? `${r.formatter(Math.abs(r.remaining))} 초과` : r.formatter(r.remaining)}</td>
+      <td><span class="rate-pill ${pillClass}">${r.pct.toFixed(0)}%</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderBudgetSection(){
+  renderBudgetMonthSelect();
+  renderBudgetOwnerTabs();
+  renderBudgetStatus();
+}
+
 async function deleteEntry(month){
   state.entries = state.entries.filter(e => e.month !== month);
   expandedMonths.delete(month);
@@ -1507,6 +1610,7 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('pieMonthSelect').addEventListener('change', renderDonut);
+document.getElementById('budgetMonthSelect').addEventListener('change', renderBudgetStatus);
 
 document.getElementById('exportBtn').addEventListener('click', () => {
   const dataStr = JSON.stringify(state, null, 2);
@@ -1532,7 +1636,6 @@ document.getElementById('importFile').addEventListener('change', async (ev) => {
     }
     if (!confirm('가져온 데이터로 현재 데이터를 덮어쓸까요?')){ return; }
     state = {
-      baseAsset: parsed.baseAsset ?? DEFAULT_DATA.baseAsset,
       targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
       owners: (Array.isArray(parsed.owners) && parsed.owners.length) ? parsed.owners : DEFAULT_DATA.owners,
       categories: normalizeCategories(parsed.categories),
