@@ -61,17 +61,8 @@
 
   /* Goal panel */
   .goal-panel{
-    display:grid;
-    grid-template-columns: 190px 1fr;
-    gap: 26px;
     margin-bottom: 18px;
-    align-items:center;
   }
-  @media (max-width: 620px){
-    .goal-panel{grid-template-columns: 1fr; }
-    .building-wrap{justify-self:center;}
-  }
-  .building-wrap svg{display:block;}
   .goal-info h2{
     font-family:'Fraunces', serif;
     font-size: 20px;
@@ -439,13 +430,11 @@
 <div class="wrap">
 
   <header class="top">
-    <div class="eyebrow">Home Purchase Fund</div>
-    <h1>HOMESWEETHOME</h1>
-    <p class="sub" id="subtitle">자산을 쌓아 목표에 도착하는 과정을 기록해요.</p>
+    <div class="eyebrow">Home Sweet Home</div>
+    <h1>JHIJEE HOUSE</h1>
   </header>
 
   <div class="card goal-panel">
-    <div class="building-wrap" id="buildingWrap"></div>
     <div class="goal-info">
       <h2 id="goalHeadline">목표까지 -</h2>
       <div class="goal-stats">
@@ -475,7 +464,6 @@
         </div>
       </div>
       <div class="goal-edit">
-        <label>현재 자산(만원) <input type="number" id="baseAssetInput" step="100"></label>
         <label>목표 자산(만원) <input type="number" id="targetAssetInput" step="100"></label>
         <button class="ghost" id="saveGoalBtn" style="padding:6px 12px; font-size:12px;">저장</button>
       </div>
@@ -821,31 +809,6 @@ function avgMonthlyContribution(){
   return sum / (sorted.length - startIdx);
 }
 
-function buildBuildingSVG(pct){
-  const floors = 16;
-  const filled = Math.max(0, Math.min(floors, Math.round((pct/100) * floors)));
-  const floorH = 9;
-  const floorGap = 2;
-  const width = 120;
-  const height = floors * (floorH + floorGap) + 26;
-  let rects = '';
-  for (let i=0; i<floors; i++){
-    const y = height - 20 - (i+1)*(floorH+floorGap) + floorGap;
-    const isFilled = i < filled;
-    rects += `<rect x="14" y="${y}" width="${width-28}" height="${floorH}" rx="2"
-      fill="${isFilled ? 'var(--gold)' : 'none'}"
-      stroke="${isFilled ? 'none' : '#D9D2C2'}" stroke-width="1.4"/>`;
-  }
-  const roofY = height - 20 - floors*(floorH+floorGap) + floorGap - 14;
-  const roofColor = filled >= floors ? 'var(--gold)' : '#D9D2C2';
-  return `
-  <svg width="${width}" height="${height+10}" viewBox="0 0 ${width} ${height+10}" xmlns="http://www.w3.org/2000/svg">
-    <polygon points="${width/2},${roofY} 10,${roofY+16} ${width-10},${roofY+16}" fill="${roofColor}"/>
-    ${rects}
-    <rect x="0" y="${height-18}" width="${width}" height="4" rx="2" fill="#E4DFD3"/>
-  </svg>`;
-}
-
 // ---- owner management ----
 function renderOwnerChips(){
   const el = document.getElementById('chipsOwners');
@@ -1134,9 +1097,6 @@ function render(){
   document.getElementById('goalHeadline').textContent =
     remaining <= 0 ? '목표 자산 달성했어요' : `목표까지 ${formatManwon(remaining)} 남았어요`;
 
-  document.getElementById('buildingWrap').innerHTML = buildBuildingSVG(pct);
-
-  document.getElementById('baseAssetInput').value = state.baseAsset;
   document.getElementById('targetAssetInput').value = state.targetAsset;
 
   renderAll();
@@ -1408,9 +1368,7 @@ document.getElementById('entryForm').addEventListener('submit', async (ev) => {
 });
 
 document.getElementById('saveGoalBtn').addEventListener('click', async () => {
-  const base = Number(document.getElementById('baseAssetInput').value) || 0;
   const target = Number(document.getElementById('targetAssetInput').value) || 0;
-  state.baseAsset = base;
   state.targetAsset = target;
   await saveData();
   render();
