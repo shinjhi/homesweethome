@@ -6,7 +6,8 @@
 <title>HOMESWEETHOME</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
 <style>
   :root{
     --bg: #F6F3EC;
@@ -21,22 +22,26 @@
     --coral: #BE5039;
     --coral-soft: #F3DCD5;
     --radius: 14px;
+    /* 영문은 Comico(설치/호스팅 시), 한글은 Pretendard로 폴백 */
+    --font-sans: 'Comico', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-display: 'Comico', 'Pretendard', -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
   }
   *{box-sizing:border-box;}
   body{
     margin:0;
     background:var(--bg);
     color:var(--ink);
-    font-family:'Inter', -apple-system, sans-serif;
+    font-family:var(--font-sans);
     padding: 28px 18px 60px;
     -webkit-font-smoothing: antialiased;
   }
   .wrap{max-width: 920px; margin: 0 auto;}
-  .num{font-family:'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums;}
+  .num{font-family:var(--font-mono); font-variant-numeric: tabular-nums;}
 
   header.top{margin-bottom: 24px;}
   .eyebrow{
-    font-family:'IBM Plex Mono', monospace;
+    font-family:var(--font-mono);
     font-size: 12px;
     letter-spacing: 0.08em;
     color: var(--gold);
@@ -44,7 +49,7 @@
     margin-bottom: 6px;
   }
   h1{
-    font-family:'Fraunces', serif;
+    font-family:var(--font-display);
     font-weight: 600;
     font-size: 30px;
     margin: 0 0 4px;
@@ -64,7 +69,7 @@
     margin-bottom: 18px;
   }
   .goal-info h2{
-    font-family:'Fraunces', serif;
+    font-family:var(--font-display);
     font-size: 20px;
     margin: 0 0 14px;
     font-weight:600;
@@ -99,13 +104,13 @@
     padding: 5px 8px;
     border-radius: 6px;
     border: 1px solid var(--border);
-    font-family:'IBM Plex Mono', monospace;
+    font-family:var(--font-mono);
     font-size: 13px;
   }
 
   section{margin-top: 22px;}
   .section-title{
-    font-family:'Fraunces', serif;
+    font-family:var(--font-display);
     font-size: 17px;
     font-weight:600;
     margin: 0 0 12px;
@@ -113,7 +118,7 @@
     align-items:baseline;
     gap:8px;
   }
-  .section-title .n{color:var(--gold); font-family:'IBM Plex Mono',monospace; font-size:13px;}
+  .section-title .n{color:var(--gold); font-family:var(--font-mono); font-size:13px;}
 
   /* Category settings */
   .cat-groups{display:flex; flex-direction:column; gap:18px;}
@@ -170,7 +175,7 @@
     width: 56px;
     border: none;
     background: transparent;
-    font-family:'IBM Plex Mono', monospace;
+    font-family:var(--font-mono);
     font-size: 12px;
     text-align: right;
     padding: 2px 4px;
@@ -236,7 +241,7 @@
     padding: 9px 11px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    font-family:'IBM Plex Mono', monospace;
+    font-family:var(--font-mono);
     font-size: 14px;
     background: var(--bg);
   }
@@ -254,9 +259,9 @@
     padding-top: 16px;
   }
   .savings-preview{font-size:13px; color:var(--ink-soft);}
-  .savings-preview b{color:var(--teal); font-family:'IBM Plex Mono',monospace;}
+  .savings-preview b{color:var(--teal); font-family:var(--font-mono);}
   button{
-    font-family:'Inter', sans-serif;
+    font-family:var(--font-sans);
     font-weight:600;
     font-size: 13.5px;
     border: none;
@@ -287,16 +292,16 @@
     text-align:right;
     padding: 10px 8px;
     border-bottom: 1px solid var(--border);
-    font-family:'IBM Plex Mono', monospace;
+    font-family:var(--font-mono);
   }
-  td.month{font-family:'Inter', sans-serif; font-weight:500;}
+  td.month{font-family:var(--font-sans); font-weight:500;}
   tr:last-child td{border-bottom:none;}
   .rate-pill{
     display:inline-block;
     padding: 2px 8px;
     border-radius: 20px;
     font-size:11.5px;
-    font-family:'Inter', sans-serif;
+    font-family:var(--font-sans);
     font-weight:600;
   }
   .rate-pill.good{background: var(--teal-soft); color: var(--teal);}
@@ -305,18 +310,18 @@
     text-align:center;
     color: var(--ink-soft);
     padding: 26px 0;
-    font-family:'Inter', sans-serif;
+    font-family:var(--font-sans);
   }
   .detail-row td{
     text-align:left;
-    font-family:'Inter', sans-serif;
+    font-family:var(--font-sans);
     color: var(--ink-soft);
     font-size: 12.5px;
     background: var(--bg);
     padding: 10px 12px;
   }
   .detail-row .detail-cats{display:flex; flex-wrap:wrap; gap: 6px 16px;}
-  .detail-row .detail-cats span b{color:var(--ink); font-family:'IBM Plex Mono', monospace;}
+  .detail-row .detail-cats span b{color:var(--ink); font-family:var(--font-mono);}
   .expand-btn{
     background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:15px; padding:2px 6px;
   }
@@ -351,13 +356,13 @@
     min-height: 3px;
   }
   .bar-pair .bar{max-width:16px;}
-  .bar-label{font-size:10.5px; color: var(--ink-soft); font-family:'IBM Plex Mono',monospace;}
+  .bar-label{font-size:10.5px; color: var(--ink-soft); font-family:var(--font-mono);}
 
   /* holdings performance table */
   .holdings-note{font-size:11.5px; color:var(--ink-soft); margin-bottom:12px;}
   .holdings-table td, .holdings-table th{text-align:right;}
   .holdings-table td:first-child, .holdings-table th:first-child{text-align:left;}
-  .holdings-name{display:flex; align-items:center; gap:6px; font-family:'Inter', sans-serif; font-weight:500;}
+  .holdings-name{display:flex; align-items:center; gap:6px; font-family:var(--font-sans); font-weight:500;}
   .sparkline-cell{display:flex; justify-content:flex-end;}
 
   /* generic tab row (used by entry form + category pie chart) */
@@ -389,10 +394,10 @@
   .pie-legend-item{display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px;}
   .pie-legend-item .name{display:flex; align-items:center; gap:8px; color:var(--ink-soft);}
   .pie-legend-item .swatch{width:10px; height:10px; border-radius:3px; display:inline-block; flex-shrink:0;}
-  .pie-legend-item .amt{font-family:'IBM Plex Mono', monospace; font-weight:600; white-space:nowrap;}
+  .pie-legend-item .amt{font-family:var(--font-mono); font-weight:600; white-space:nowrap;}
   .pie-month-select{
     margin-left:auto;
-    font-family:'IBM Plex Mono', monospace;
+    font-family:var(--font-mono);
     font-size: 12px;
     border:1px solid var(--border);
     border-radius:6px;
@@ -695,13 +700,9 @@ let pieGroup = 'expense';
 let entryTab = 'expense';
 let budgetOwnerFilter = '전체';
 
+// 입력값은 만원 단위지만 표시는 전부 원 단위로, 1,000 단위마다 콤마를 넣는다.
 function formatManwon(v){
-  const n = Math.round(v);
-  if (Math.abs(n) >= 10000){
-    const eok = n / 10000;
-    return (Math.round(eok*10)/10).toLocaleString('ko-KR') + '억';
-  }
-  return n.toLocaleString('ko-KR') + '만원';
+  return Math.round((v || 0) * 10000).toLocaleString('ko-KR') + '원';
 }
 
 function formatWon(v){
@@ -766,11 +767,13 @@ function sumGroup(obj){
   return Object.values(obj || {}).reduce((s, v) => s + (Number(v) || 0), 0);
 }
 
+// 브라우저 localStorage에 자동 저장 — 파일이 아니라 링크(호스팅)로 열어도
+// 같은 주소에서는 데이터가 그대로 유지됩니다.
 async function loadData(){
   try{
-    const result = await window.storage.get(STORAGE_KEY, false);
-    if (result && result.value){
-      const parsed = JSON.parse(result.value);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw){
+      const parsed = JSON.parse(raw);
       state = {
         targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
         owners: (Array.isArray(parsed.owners) && parsed.owners.length) ? parsed.owners : DEFAULT_DATA.owners,
@@ -784,14 +787,14 @@ async function loadData(){
       };
     }
   }catch(e){
-    // no existing data yet, use defaults
+    // 저장된 데이터가 없거나 형식이 맞지 않으면 기본값 사용
   }
   render();
 }
 
 async function saveData(){
   try{
-    await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }catch(e){
     showToast('저장에 실패했어요. 다시 시도해주세요.');
   }
