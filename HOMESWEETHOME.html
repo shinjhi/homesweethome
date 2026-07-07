@@ -153,14 +153,23 @@
     color:#9AA2AD; font-size:14px; line-height:1; cursor:pointer; border-radius:50%;
   }
   .chip button:hover{color:var(--coral);}
-  .add-cat-row{display:flex; gap:8px;}
+  .add-cat-row{display:flex; gap:8px; flex-wrap:wrap;}
   .add-cat-row input{
     flex:1;
+    min-width: 100px;
     padding: 8px 12px;
     border-radius: 8px;
     border: 1px solid var(--border);
     font-size: 13.5px;
     background: var(--bg);
+  }
+  .add-cat-row select{
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 13px;
+    background: var(--bg);
+    color: var(--ink);
   }
   .add-cat-row button{
     background: var(--ink); color:#fff; font-size:13px; padding: 8px 16px;
@@ -176,6 +185,20 @@
     color: var(--ink-soft);
   }
   .chip-budget:focus{outline: 1px solid var(--gold); border-radius:4px; color:var(--ink);}
+  .chip .chip-meta{font-size:11px; color:var(--ink-soft); white-space:nowrap;}
+
+  .owner-tag{
+    font-size: 10px;
+    font-weight:600;
+    padding: 1px 7px;
+    border-radius: 10px;
+    white-space:nowrap;
+    background: var(--border);
+    color: var(--ink-soft);
+  }
+  .owner-tag[data-owner="나"]{background:var(--gold-soft); color:var(--gold);}
+  .owner-tag[data-owner="남편"]{background:var(--teal-soft); color:var(--teal);}
+  .owner-tag[data-owner="공동"]{background:var(--border); color:var(--ink-soft);}
 
   /* Form */
   form.entry-form{
@@ -204,7 +227,7 @@
     gap: 12px;
   }
   .field{display:flex; flex-direction:column; gap:5px;}
-  .field label{font-size:12.5px; color:var(--ink-soft);}
+  .field label{font-size:12.5px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;}
   .field .hint{font-size: 11px; color:#9AA2AD; margin-top:2px;}
   .field input{
     padding: 9px 11px;
@@ -322,6 +345,13 @@
     min-height: 3px;
   }
   .bar-label{font-size:10.5px; color: var(--ink-soft); font-family:'IBM Plex Mono',monospace;}
+
+  /* holdings performance table */
+  .holdings-note{font-size:11.5px; color:var(--ink-soft); margin-bottom:12px;}
+  .holdings-table td, .holdings-table th{text-align:right;}
+  .holdings-table td:first-child, .holdings-table th:first-child{text-align:left;}
+  .holdings-name{display:flex; align-items:center; gap:6px; font-family:'Inter', sans-serif; font-weight:500;}
+  .sparkline-cell{display:flex; justify-content:flex-end;}
 
   /* pie / donut chart */
   .pie-tabs{display:flex; gap:8px; margin-bottom:16px;}
@@ -449,6 +479,11 @@
         <div class="chip-row" id="chipsExpense"></div>
         <div class="add-cat-row">
           <input type="text" id="newCatExpense" placeholder="예: 육아, 경조사비">
+          <select id="newCatExpenseOwner">
+            <option value="공동">공동</option>
+            <option value="나">나</option>
+            <option value="남편">남편</option>
+          </select>
           <button onclick="addCategory('expense')">추가</button>
         </div>
       </div>
@@ -457,6 +492,11 @@
         <div class="chip-row" id="chipsSavings"></div>
         <div class="add-cat-row">
           <input type="text" id="newCatSavings" placeholder="예: 비상금 통장">
+          <select id="newCatSavingsOwner">
+            <option value="공동">공동</option>
+            <option value="나">나</option>
+            <option value="남편">남편</option>
+          </select>
           <button onclick="addCategory('savings')">추가</button>
         </div>
       </div>
@@ -464,8 +504,15 @@
         <div class="cat-group-label"><span class="dot invest"></span>투자 종목</div>
         <div class="chip-row" id="chipsInvest"></div>
         <div class="add-cat-row">
-          <input type="text" id="newCatInvest" placeholder="예: 삼성전자, 나스닥ETF">
-          <button onclick="addCategory('invest')">추가</button>
+          <input type="text" id="newCatInvest" placeholder="종목명 (예: 삼성전자)">
+          <select id="newCatInvestOwner">
+            <option value="공동">공동</option>
+            <option value="나">나</option>
+            <option value="남편">남편</option>
+          </select>
+          <input type="number" id="newCatInvestShares" placeholder="보유수량(주)" min="0">
+          <input type="number" id="newCatInvestCost" placeholder="매입단가(원)" min="0">
+          <button onclick="addInvestCategory()">추가</button>
         </div>
       </div>
     </div>
@@ -495,8 +542,8 @@
           <div class="field-grid" id="gridSavings"></div>
         </div>
         <div>
-          <div class="field-group-title"><span class="dot invest"></span>투자 (현재 잔고)</div>
-          <div style="font-size:11.5px; color:var(--ink-soft); margin:-6px 0 10px;">이번 달에 넣은 돈이 아니라, 오늘 기준 그 종목의 총 평가금액을 적어주세요. 오르고 내린 만큼은 자동으로 계산돼요.</div>
+          <div class="field-group-title"><span class="dot invest"></span>투자 (오늘 현재가)</div>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin:-6px 0 10px;">산 금액이 아니라, 오늘 기준 그 종목의 1주당 현재가(원)를 적어주세요. 평가금액·수익률은 보유수량과 매입단가로 자동 계산돼요.</div>
           <div class="field-grid" id="gridInvest"></div>
         </div>
 
@@ -508,8 +555,31 @@
     </div>
   </section>
 
+  <section>
+    <div class="section-title"><span class="n">02</span> 종목별 수익률</div>
+    <div class="card">
+      <div class="holdings-note">보유수량 × 오늘 현재가 기준으로 계산돼요. 매달 현재가만 입력하면 여기서 자동 갱신돼요.</div>
+      <div style="overflow-x:auto;">
+        <table class="holdings-table">
+          <thead>
+            <tr>
+              <th>종목</th>
+              <th>보유수량</th>
+              <th>매입단가</th>
+              <th>현재가</th>
+              <th>평가금액</th>
+              <th>수익률</th>
+              <th>추이</th>
+            </tr>
+          </thead>
+          <tbody id="holdingsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <section class="chart-card">
-    <div class="section-title"><span class="n">02</span> 월별 적립 추이</div>
+    <div class="section-title"><span class="n">03</span> 월별 순증가 추이</div>
     <div class="card">
       <div class="chart-bars" id="chartBars"></div>
     </div>
@@ -517,7 +587,7 @@
 
   <section>
     <div class="section-title">
-      <span class="n">03</span> 카테고리 비중
+      <span class="n">04</span> 카테고리 비중
       <select class="pie-month-select" id="pieMonthSelect"></select>
     </div>
     <div class="card">
@@ -530,7 +600,7 @@
   </section>
 
   <section>
-    <div class="section-title"><span class="n">04</span> 히스토리</div>
+    <div class="section-title"><span class="n">05</span> 히스토리</div>
     <div class="card" style="padding: 8px 16px 16px;">
       <table>
         <thead>
@@ -600,6 +670,46 @@ function formatManwon(v){
   return n.toLocaleString('ko-KR') + '만원';
 }
 
+function formatWon(v){
+  return Math.round(v || 0).toLocaleString('ko-KR') + '원';
+}
+
+function getCatDef(group, name){
+  return (state.categories[group] || []).find(c => c.name === name);
+}
+
+// 투자 종목은 "보유수량 x 현재가(원)"으로 평가금액(만원)을 계산한다.
+function investEval(catDef, price){
+  const shares = Number(catDef?.shares) || 0;
+  return (shares * (Number(price) || 0)) / 10000;
+}
+
+function investCostTotal(catDef){
+  const shares = Number(catDef?.shares) || 0;
+  const cost = Number(catDef?.costBasis) || 0;
+  return (shares * cost) / 10000;
+}
+
+function investTotalForEntry(investObj){
+  return Object.entries(investObj || {}).reduce((sum, [name, price]) => {
+    return sum + investEval(getCatDef('invest', name), price);
+  }, 0);
+}
+
+function normalizeCategories(cats){
+  const norm = (arr, group) => (arr || []).map(c => {
+    if (typeof c === 'string'){
+      return group === 'invest' ? { name: c, owner: '공동', shares: 0, costBasis: 0 } : { name: c, owner: '공동' };
+    }
+    return c;
+  });
+  return {
+    expense: norm(cats?.expense, 'expense'),
+    savings: norm(cats?.savings, 'savings'),
+    invest: norm(cats?.invest, 'invest'),
+  };
+}
+
 function monthLabel(m){
   const [y, mo] = m.split('-');
   return `${y.slice(2)}.${mo}`;
@@ -617,11 +727,7 @@ async function loadData(){
       state = {
         baseAsset: parsed.baseAsset ?? DEFAULT_DATA.baseAsset,
         targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
-        categories: {
-          expense: parsed.categories?.expense ?? DEFAULT_DATA.categories.expense,
-          savings: parsed.categories?.savings ?? DEFAULT_DATA.categories.savings,
-          invest: parsed.categories?.invest ?? DEFAULT_DATA.categories.invest,
-        },
+        categories: normalizeCategories(parsed.categories),
         budgets: {
           expense: parsed.budgets?.expense ?? {},
           savings: parsed.budgets?.savings ?? {},
@@ -657,8 +763,8 @@ function sortedEntries(){
 }
 
 function investDeltaFor(sorted, idx){
-  const cur = sumGroup(sorted[idx].invest);
-  const prev = idx > 0 ? sumGroup(sorted[idx-1].invest) : 0;
+  const cur = investTotalForEntry(sorted[idx].invest);
+  const prev = idx > 0 ? investTotalForEntry(sorted[idx-1].invest) : 0;
   return cur - prev;
 }
 
@@ -669,7 +775,7 @@ function netContributionFor(sorted, idx){
 function currentAsset(){
   const sorted = sortedEntries();
   const savingsCum = sorted.reduce((s,e)=> s + sumGroup(e.savings), 0);
-  const investLatest = sorted.length ? sumGroup(sorted[sorted.length-1].invest) : 0;
+  const investLatest = sorted.length ? investTotalForEntry(sorted[sorted.length-1].invest) : 0;
   return state.baseAsset + savingsCum + investLatest;
 }
 
@@ -716,16 +822,21 @@ function renderChips(group, containerId){
     el.innerHTML = `<span style="font-size:12.5px; color:#9AA2AD;">아직 카테고리가 없어요. 아래에 추가해보세요.</span>`;
     return;
   }
-  const placeholder = group === 'expense' ? '예산' : '목표';
-  const title = group === 'expense' ? '월 예산(만원)' : '목표 금액(만원)';
-  el.innerHTML = state.categories[group].map(name => {
-    const budget = (state.budgets?.[group] || {})[name] || '';
+  const placeholder = group === 'expense' ? '예산' : (group === 'invest' ? '목표가' : '목표');
+  const title = group === 'expense' ? '월 예산(만원)' : (group === 'invest' ? '목표가(원)' : '목표 금액(만원)');
+  el.innerHTML = state.categories[group].map(cat => {
+    const budget = (state.budgets?.[group] || {})[cat.name] || '';
+    const meta = group === 'invest'
+      ? `<span class="chip-meta">${Number(cat.shares) || 0}주 · 매입 ${formatWon(cat.costBasis)}</span>`
+      : '';
     return `
     <div class="chip">
-      <span>${name}</span>
+      <span>${cat.name}</span>
+      <span class="owner-tag" data-owner="${cat.owner || '공동'}">${cat.owner || '공동'}</span>
+      ${meta}
       <input type="number" class="chip-budget" min="0" placeholder="${placeholder}" title="${title}"
-        value="${budget}" data-group="${group}" data-cat="${name.replace(/"/g, '&quot;')}">
-      <button onclick="removeCategory('${group}', '${name.replace(/'/g, "\\'")}')" title="삭제">×</button>
+        value="${budget}" data-group="${group}" data-cat="${cat.name.replace(/"/g, '&quot;')}">
+      <button onclick="removeCategory('${group}', '${cat.name.replace(/'/g, "\\'")}')" title="삭제">×</button>
     </div>`;
   }).join('');
 }
@@ -745,26 +856,57 @@ document.addEventListener('change', async (ev) => {
 });
 
 async function addCategory(group){
-  const inputId = { expense: 'newCatExpense', savings: 'newCatSavings', invest: 'newCatInvest' }[group];
+  const inputId = { expense: 'newCatExpense', savings: 'newCatSavings' }[group];
+  const ownerId = { expense: 'newCatExpenseOwner', savings: 'newCatSavingsOwner' }[group];
   const input = document.getElementById(inputId);
+  const ownerSel = document.getElementById(ownerId);
   const name = input.value.trim();
   if (!name) return;
-  if (state.categories[group].includes(name)){
+  if (state.categories[group].some(c => c.name === name)){
     showToast('이미 있는 카테고리예요');
     return;
   }
-  state.categories[group].push(name);
+  state.categories[group].push({ name, owner: ownerSel.value });
   input.value = '';
   await saveData();
   renderAll();
+  renderHoldings();
   showToast(`"${name}" 카테고리를 추가했어요`);
 }
 window.addCategory = addCategory;
 
-async function removeCategory(group, name){
-  state.categories[group] = state.categories[group].filter(c => c !== name);
+async function addInvestCategory(){
+  const nameInput = document.getElementById('newCatInvest');
+  const ownerSel = document.getElementById('newCatInvestOwner');
+  const sharesInput = document.getElementById('newCatInvestShares');
+  const costInput = document.getElementById('newCatInvestCost');
+  const name = nameInput.value.trim();
+  if (!name) return;
+  if (state.categories.invest.some(c => c.name === name)){
+    showToast('이미 있는 종목이에요');
+    return;
+  }
+  state.categories.invest.push({
+    name,
+    owner: ownerSel.value,
+    shares: Number(sharesInput.value) || 0,
+    costBasis: Number(costInput.value) || 0,
+  });
+  nameInput.value = '';
+  sharesInput.value = '';
+  costInput.value = '';
   await saveData();
   renderAll();
+  renderHoldings();
+  showToast(`"${name}" 종목을 추가했어요`);
+}
+window.addInvestCategory = addInvestCategory;
+
+async function removeCategory(group, name){
+  state.categories[group] = state.categories[group].filter(c => c.name !== name);
+  await saveData();
+  renderAll();
+  renderHoldings();
   showToast(`"${name}" 카테고리를 삭제했어요`);
 }
 window.removeCategory = removeCategory;
@@ -776,13 +918,27 @@ function renderFormGrid(group, containerId){
     el.innerHTML = `<div style="font-size:12.5px; color:#9AA2AD;">위 "카테고리 설정"에서 항목을 먼저 추가해주세요.</div>`;
     return;
   }
+  if (group === 'invest'){
+    el.innerHTML = state.categories.invest.map(cat => {
+      const budget = (state.budgets?.invest || {})[cat.name];
+      const hints = [`매입가 ${formatWon(cat.costBasis)}`];
+      if (budget) hints.push(`목표가 ${formatWon(budget)}`);
+      return `
+      <div class="field">
+        <label>${cat.name} <span class="owner-tag" data-owner="${cat.owner || '공동'}">${cat.owner || '공동'}</span></label>
+        <input type="number" min="0" placeholder="현재가(원)" data-group="invest" data-cat="${cat.name.replace(/"/g, '&quot;')}">
+        <div class="hint">${hints.join(' · ')}</div>
+      </div>`;
+    }).join('');
+    return;
+  }
   const budgetLabel = group === 'expense' ? '예산' : '목표';
-  el.innerHTML = state.categories[group].map(name => {
-    const budget = (state.budgets?.[group] || {})[name];
+  el.innerHTML = state.categories[group].map(cat => {
+    const budget = (state.budgets?.[group] || {})[cat.name];
     return `
     <div class="field">
-      <label>${name}</label>
-      <input type="number" min="0" placeholder="0" data-group="${group}" data-cat="${name.replace(/"/g, '&quot;')}">
+      <label>${cat.name} <span class="owner-tag" data-owner="${cat.owner || '공동'}">${cat.owner || '공동'}</span></label>
+      <input type="number" min="0" placeholder="0" data-group="${group}" data-cat="${cat.name.replace(/"/g, '&quot;')}">
       ${budget ? `<div class="hint">${budgetLabel} ${formatManwon(budget)}</div>` : ''}
     </div>`;
   }).join('');
@@ -831,13 +987,13 @@ function getPreviousInvestTotal(beforeMonth){
   const prior = state.entries
     .filter(e => e.month < beforeMonth)
     .sort((a,b)=> b.month.localeCompare(a.month))[0];
-  return prior ? sumGroup(prior.invest) : 0;
+  return prior ? investTotalForEntry(prior.invest) : 0;
 }
 
 function updateSavingsPreview(){
   const income = Number(document.getElementById('fIncome').value) || 0;
   const savings = sumGroup(collectFormGroup('savings'));
-  const investNow = sumGroup(collectFormGroup('invest'));
+  const investNow = investTotalForEntry(collectFormGroup('invest'));
   const month = document.getElementById('fMonth').value;
   const investDelta = investNow - (month ? getPreviousInvestTotal(month) : 0);
   const total = savings + investDelta;
@@ -906,6 +1062,64 @@ function render(){
   renderHistory();
   renderChart();
   renderPie();
+  renderHoldings();
+}
+
+function buildSparkline(values){
+  if (values.length === 0){
+    return '<span style="font-size:11px; color:#9AA2AD;">기록 없음</span>';
+  }
+  const w = 60, h = 24, pad = 3;
+  const last = values[values.length - 1];
+  const color = last >= 0 ? 'var(--teal)' : 'var(--coral)';
+  if (values.length === 1){
+    return `<svg width="${w}" height="${h}"><circle cx="${w/2}" cy="${h/2}" r="3" fill="${color}"/></svg>`;
+  }
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const range = (max - min) || 1;
+  const stepX = (w - pad*2) / (values.length - 1);
+  const points = values.map((v, i) => {
+    const x = pad + i*stepX;
+    const y = h - pad - ((v - min)/range) * (h - pad*2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+function renderHoldings(){
+  const body = document.getElementById('holdingsBody');
+  const holdings = state.categories.invest;
+  if (holdings.length === 0){
+    body.innerHTML = `<tr class="empty-row"><td colspan="7">아직 등록된 종목이 없어요. "00 카테고리 설정"에서 추가해보세요.</td></tr>`;
+    return;
+  }
+  const sorted = sortedEntries();
+  body.innerHTML = holdings.map(cat => {
+    const priceHistory = sorted
+      .filter(e => e.invest && e.invest[cat.name] !== undefined && e.invest[cat.name] !== '' && e.invest[cat.name] !== null)
+      .map(e => Number(e.invest[cat.name]));
+    const returnHistory = cat.costBasis > 0
+      ? priceHistory.map(p => (p - cat.costBasis) / cat.costBasis * 100)
+      : [];
+    const latestPrice = priceHistory.length ? priceHistory[priceHistory.length - 1] : null;
+    const evalAmt = latestPrice !== null ? investEval(cat, latestPrice) : null;
+    const returnPct = (latestPrice !== null && cat.costBasis > 0)
+      ? (latestPrice - cat.costBasis) / cat.costBasis * 100
+      : null;
+    const pillClass = returnPct === null ? '' : (returnPct >= 0 ? 'good' : 'low');
+    return `<tr>
+      <td class="holdings-name">${cat.name} <span class="owner-tag" data-owner="${cat.owner || '공동'}">${cat.owner || '공동'}</span></td>
+      <td>${Number(cat.shares) || 0}주</td>
+      <td>${formatWon(cat.costBasis)}</td>
+      <td>${latestPrice !== null ? formatWon(latestPrice) : '-'}</td>
+      <td>${evalAmt !== null ? formatManwon(evalAmt) : '-'}</td>
+      <td>${returnPct !== null ? `<span class="rate-pill ${pillClass}">${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(1)}%</span>` : '-'}</td>
+      <td><div class="sparkline-cell">${buildSparkline(returnHistory)}</div></td>
+    </tr>`;
+  }).join('');
 }
 
 function renderHistory(){
@@ -936,16 +1150,25 @@ function renderHistory(){
       const catLine = (obj, group) => Object.entries(obj || {})
         .filter(([,v]) => Number(v) > 0)
         .map(([k,v]) => {
+          const catDef = getCatDef(group, k);
+          const owner = catDef?.owner || '공동';
+          const ownerTag = `<span class="owner-tag" data-owner="${owner}">${owner}</span>`;
+          if (group === 'invest'){
+            const evalAmt = investEval(catDef, v);
+            const returnPct = catDef && catDef.costBasis > 0 ? (Number(v) - catDef.costBasis) / catDef.costBasis * 100 : null;
+            const pillClass = returnPct === null ? '' : (returnPct >= 0 ? 'good' : 'low');
+            return `<span>${k} ${ownerTag} <b>${formatWon(v)}</b> → ${formatManwon(evalAmt)}${returnPct !== null ? ` <span class="rate-pill ${pillClass}" style="padding:1px 6px;">${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(1)}%</span>` : ''}</span>`;
+          }
           const budget = (state.budgets?.[group] || {})[k];
           const over = group === 'expense' && budget && Number(v) > budget;
-          return `<span>${k} <b>${formatManwon(v)}</b>${over ? ' <span style="color:var(--coral); font-size:11px;">초과</span>' : ''}</span>`;
+          return `<span>${k} ${ownerTag} <b>${formatManwon(v)}</b>${over ? ' <span style="color:var(--coral); font-size:11px;">초과</span>' : ''}</span>`;
         }).join('');
       const investDelta = investDeltaFor(sorted, idx);
       const deltaText = `<span style="color:${investDelta >= 0 ? 'var(--teal)' : 'var(--coral)'}; font-size:11px;">(전월 대비 ${investDelta >= 0 ? '+' : '-'}${formatManwon(Math.abs(investDelta))})</span>`;
       rows += `<tr class="detail-row"><td colspan="8">
         <div class="detail-cats">${catLine(e.expense, 'expense') || '<span>소비 내역 없음</span>'}</div>
         ${catLine(e.savings, 'savings') ? `<div class="detail-cats" style="margin-top:8px;">${catLine(e.savings, 'savings')}</div>` : ''}
-        ${catLine(e.invest, 'invest') ? `<div class="detail-cats" style="margin-top:8px;"><span style="color:var(--ink-soft); font-size:11px;">투자 잔고(평가액)</span> ${deltaText}</div>
+        ${catLine(e.invest, 'invest') ? `<div class="detail-cats" style="margin-top:8px;"><span style="color:var(--ink-soft); font-size:11px;">투자 종목 (현재가 → 평가금액)</span> ${deltaText}</div>
         <div class="detail-cats" style="margin-top:4px;">${catLine(e.invest, 'invest')}</div>` : ''}
       </td></tr>`;
     }
@@ -1034,7 +1257,10 @@ function renderDonut(){
   const donutEl = document.getElementById('donutChart');
   const legendEl = document.getElementById('pieLegend');
   const entry = state.entries.find(e => e.month === sel.value);
-  const data = entry ? (entry[pieGroup] || {}) : {};
+  const rawData = entry ? (entry[pieGroup] || {}) : {};
+  const data = pieGroup === 'invest'
+    ? Object.fromEntries(Object.entries(rawData).map(([name, price]) => [name, investEval(getCatDef('invest', name), price)]))
+    : rawData;
   const filtered = Object.entries(data).filter(([,v]) => Number(v) > 0);
   const total = filtered.reduce((s,[,v]) => s + Number(v), 0);
 
@@ -1058,8 +1284,10 @@ function renderDonut(){
     .sort((a, b) => b.v - a.v)
     .map(({ cat, v, color }) => {
       const pct = (v / total * 100).toFixed(0);
+      const owner = getCatDef(pieGroup, cat)?.owner;
+      const ownerTag = owner ? `<span class="owner-tag" data-owner="${owner}">${owner}</span>` : '';
       return `<div class="pie-legend-item">
-        <span class="name"><span class="swatch" style="background:${color}"></span>${cat}</span>
+        <span class="name"><span class="swatch" style="background:${color}"></span>${cat}${ownerTag}</span>
         <span class="amt">${formatManwon(v)} · ${pct}%</span>
       </div>`;
     }).join('');
@@ -1145,11 +1373,7 @@ document.getElementById('importFile').addEventListener('change', async (ev) => {
     state = {
       baseAsset: parsed.baseAsset ?? DEFAULT_DATA.baseAsset,
       targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
-      categories: {
-        expense: parsed.categories?.expense ?? [],
-        savings: parsed.categories?.savings ?? [],
-        invest: parsed.categories?.invest ?? [],
-      },
+      categories: normalizeCategories(parsed.categories),
       budgets: {
         expense: parsed.budgets?.expense ?? {},
         savings: parsed.budgets?.savings ?? {},
@@ -1169,12 +1393,20 @@ document.getElementById('importFile').addEventListener('change', async (ev) => {
 });
 
 // enter key adds category
-['newCatExpense','newCatSavings','newCatInvest'].forEach(id => {
+['newCatExpense','newCatSavings'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter'){
       ev.preventDefault();
-      const group = id === 'newCatExpense' ? 'expense' : id === 'newCatSavings' ? 'savings' : 'invest';
-      addCategory(group);
+      addCategory(id === 'newCatExpense' ? 'expense' : 'savings');
+    }
+  });
+});
+
+['newCatInvest','newCatInvestShares','newCatInvestCost'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter'){
+      ev.preventDefault();
+      addInvestCategory();
     }
   });
 });
