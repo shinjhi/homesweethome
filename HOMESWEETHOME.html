@@ -361,9 +361,32 @@
   /* holdings performance table */
   .holdings-note{font-size:11.5px; color:var(--ink-soft); margin-bottom:12px;}
   .holdings-table td, .holdings-table th{text-align:right;}
-  .holdings-table td:first-child, .holdings-table th:first-child{text-align:left;}
-  .holdings-name{display:flex; align-items:center; gap:6px; font-family:var(--font-sans); font-weight:500;}
-  .sparkline-cell{display:flex; justify-content:flex-end;}
+  .holdings-table td:first-child, .holdings-table th:first-child,
+  .holdings-table td:nth-child(2), .holdings-table td:nth-child(3){text-align:left;}
+  .holdings-table input, .holdings-table select{
+    width:100%;
+    min-width:70px;
+    padding:6px 8px;
+    border-radius:6px;
+    border:1px solid var(--border);
+    font-family:var(--font-mono);
+    font-size:13px;
+    background:var(--bg);
+  }
+  .holdings-table select{font-family:var(--font-sans);}
+  .holdings-table input:focus, .holdings-table select:focus{outline:2px solid var(--gold-soft); border-color:var(--gold);}
+  .holdings-table input[data-field="name"]{font-family:var(--font-sans); min-width:90px;}
+  tr.group-row td{
+    background:var(--bg);
+    font-family:var(--font-sans);
+    font-weight:600;
+    font-size:12.5px;
+    text-align:left;
+    cursor:pointer;
+    padding:8px 10px;
+  }
+  tr.group-row.lvl2 td{padding-left:26px; font-weight:500; color:var(--ink-soft);}
+  tr.group-row .caret{display:inline-block; width:14px; color:var(--ink-soft);}
 
   /* generic tab row (used by entry form + category pie chart) */
   .tab-row{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
@@ -568,14 +591,12 @@
         </div>
       </div>
       <div class="cat-group">
-        <div class="cat-group-label"><span class="dot invest"></span>투자 종목</div>
+        <div class="cat-group-label"><span class="dot invest"></span>투자 카테고리</div>
         <div class="chip-row" id="chipsInvest"></div>
         <div class="add-cat-row">
-          <input type="text" id="newCatInvest" placeholder="종목명 (예: 삼성전자)">
+          <input type="text" id="newCatInvest" placeholder="예: 미국 주식, 한국 주식, ETF">
           <select id="newCatInvestOwner"></select>
-          <input type="number" id="newCatInvestShares" placeholder="보유수량(주)" min="0">
-          <input type="number" id="newCatInvestCost" placeholder="매입단가(원)" min="0">
-          <button onclick="addInvestCategory()">추가</button>
+          <button onclick="addCategory('invest')">추가</button>
         </div>
       </div>
     </div>
@@ -605,22 +626,27 @@
           <div class="field-grid" id="gridSavings"></div>
         </div>
         <div class="entry-tab-panel" data-tab="invest">
-          <div class="holdings-note">보유수량 × 오늘 현재가 기준으로 평가금액·수익률이 자동 계산돼요. 현재가만 입력해주세요.</div>
+          <div class="holdings-note">종목·수량·단가를 표에서 바로 수정할 수 있어요. 평가금액과 수익률은 보유수량 × 현재가로 자동 계산돼요.</div>
           <div style="overflow-x:auto;">
             <table class="holdings-table">
               <thead>
                 <tr>
+                  <th>보유자</th>
+                  <th>카테고리</th>
                   <th>종목</th>
                   <th>보유수량</th>
                   <th>매입단가</th>
                   <th>현재가</th>
                   <th>평가금액</th>
                   <th>수익률</th>
-                  <th>추이</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody id="holdingsBody"></tbody>
             </table>
+          </div>
+          <div style="margin-top:12px;">
+            <button type="button" class="ghost" style="font-size:12.5px; padding:7px 14px;" onclick="addHolding()">+ 종목 추가</button>
           </div>
         </div>
 
@@ -738,15 +764,20 @@ const DEFAULT_DATA = {
   categories: {
     expense: [],
     savings: [],
-    invest: []
+    invest: []   // 투자 대분류 버킷 {name, owner} (예: 미국 주식, ETF)
   },
+  holdings: [],  // 개별 종목 {id, owner, category, name, shares, costBasis(원)}
   budgets: { // {group: {cat: monthlyBudgetInManwon}}
     expense: {},
     savings: {},
     invest: {}
   },
-  entries: [] // {month, income, expense:{cat:amt}, savings:{cat:amt}, invest:{cat:amt}}
+  entries: [] // {month, income, expense:{cat:amt}, savings:{cat:amt}, invest:{holdingId:현재가(원)}}
 };
+
+function genId(){
+  return (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'h' + Date.now() + Math.random().toString(16).slice(2);
+}
 
 const PIE_COLORS = ['#B8892F','#3D6B63','#BE5039','#6D8FB0','#8A6BB0','#C9A62B','#5B8C5A','#B0587A'];
 
@@ -770,10 +801,6 @@ function formatManwon(v){
   return Math.round((v || 0) * 10000).toLocaleString('ko-KR') + '원';
 }
 
-function formatWon(v){
-  return Math.round(v || 0).toLocaleString('ko-KR') + '원';
-}
-
 function ownerColor(owner){
   if (!owner || owner === '공동') return { bg: 'var(--border)', fg: 'var(--ink-soft)' };
   let hash = 0;
@@ -791,36 +818,47 @@ function getCatDef(group, name){
   return (state.categories[group] || []).find(c => c.name === name);
 }
 
+function getHolding(id){
+  return (state.holdings || []).find(h => h.id === id);
+}
+
 // 투자 종목은 "보유수량 x 현재가(원)"으로 평가금액(만원)을 계산한다.
-function investEval(catDef, price){
-  const shares = Number(catDef?.shares) || 0;
+function investEval(holding, price){
+  const shares = Number(holding?.shares) || 0;
   return (shares * (Number(price) || 0)) / 10000;
 }
 
-function investCostTotal(catDef){
-  const shares = Number(catDef?.shares) || 0;
-  const cost = Number(catDef?.costBasis) || 0;
-  return (shares * cost) / 10000;
-}
-
 function investTotalForEntry(investObj){
-  return Object.entries(investObj || {}).reduce((sum, [name, price]) => {
-    return sum + investEval(getCatDef('invest', name), price);
+  return Object.entries(investObj || {}).reduce((sum, [id, price]) => {
+    return sum + investEval(getHolding(id), price);
   }, 0);
 }
 
 function normalizeCategories(cats){
-  const norm = (arr, group) => (arr || []).map(c => {
-    if (typeof c === 'string'){
-      return group === 'invest' ? { name: c, owner: '공동', shares: 0, costBasis: 0 } : { name: c, owner: '공동' };
-    }
-    return c;
-  });
+  const norm = (arr) => (arr || []).map(c =>
+    typeof c === 'string' ? { name: c, owner: '공동' } : { name: c.name, owner: c.owner || '공동' }
+  );
   return {
-    expense: norm(cats?.expense, 'expense'),
-    savings: norm(cats?.savings, 'savings'),
-    invest: norm(cats?.invest, 'invest'),
+    expense: norm(cats?.expense),
+    savings: norm(cats?.savings),
+    invest: norm(cats?.invest),
   };
+}
+
+// 구버전(종목 = 투자 카테고리, 수량/단가 포함) 데이터를 새 구조(대분류 + holdings)로 이전.
+// 이전된 종목의 id를 기존 종목명 그대로 쓰기 때문에 과거 월별 현재가 기록도 그대로 연결된다.
+function migrateHoldings(parsed){
+  if (Array.isArray(parsed.holdings)) return parsed.holdings; // 이미 새 구조
+  const oldInvest = parsed.categories?.invest || [];
+  const migrated = oldInvest
+    .filter(c => typeof c === 'object' && (c.shares !== undefined || c.costBasis !== undefined))
+    .map(c => ({ id: c.name, owner: c.owner || '공동', category: '기타', name: c.name,
+                 shares: Number(c.shares) || 0, costBasis: Number(c.costBasis) || 0 }));
+  if (migrated.length){
+    parsed.categories.invest = [{ name: '기타', owner: '공동' }];
+    if (parsed.budgets) parsed.budgets.invest = {}; // 종목별 목표가는 대분류 체계와 안 맞아 폐기
+  }
+  return migrated;
 }
 
 function monthLabel(m){
@@ -835,10 +873,12 @@ function sumGroup(obj){
 // 저장된 JSON을 현재 state로 변환 (localStorage / 클라우드 공통)
 function hydrateState(parsed){
   if (!parsed || typeof parsed !== 'object') return;
+  const holdings = migrateHoldings(parsed); // categories/budgets 수정 전에 먼저 실행
   state = {
     targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
     owners: (Array.isArray(parsed.owners) && parsed.owners.length) ? parsed.owners : DEFAULT_DATA.owners,
     categories: normalizeCategories(parsed.categories),
+    holdings,
     budgets: {
       expense: parsed.budgets?.expense ?? {},
       savings: parsed.budgets?.savings ?? {},
@@ -997,18 +1037,14 @@ function renderChips(group, containerId){
     el.innerHTML = `<span style="font-size:12.5px; color:#9AA2AD;">아직 카테고리가 없어요. 아래에 추가해보세요.</span>`;
     return;
   }
-  const placeholder = group === 'expense' ? '예산' : (group === 'invest' ? '목표가' : '목표');
-  const title = group === 'expense' ? '월 예산(만원)' : (group === 'invest' ? '목표가(원)' : '목표 금액(만원)');
+  const placeholder = group === 'expense' ? '예산' : '목표';
+  const title = group === 'expense' ? '월 예산(만원)' : '목표 금액(만원)';
   el.innerHTML = state.categories[group].map(cat => {
     const budget = (state.budgets?.[group] || {})[cat.name] || '';
-    const meta = group === 'invest'
-      ? `<span class="chip-meta">${Number(cat.shares) || 0}주 · 매입 ${formatWon(cat.costBasis)}</span>`
-      : '';
     return `
     <div class="chip">
       <span>${cat.name}</span>
       ${ownerTagHTML(cat.owner)}
-      ${meta}
       <input type="number" class="chip-budget" min="0" placeholder="${placeholder}" title="${title}"
         value="${budget}" data-group="${group}" data-cat="${cat.name.replace(/"/g, '&quot;')}">
       <button onclick="removeCategory('${group}', '${cat.name.replace(/'/g, "\\'")}')" title="삭제">×</button>
@@ -1027,7 +1063,7 @@ document.addEventListener('change', async (ev) => {
   else delete state.budgets[group][cat];
   await saveData();
   if (group === 'invest'){
-    reRenderHoldingsPreserving();
+    renderBudgetSection();
   } else {
     const containerId = { expense:'gridExpense', savings:'gridSavings' }[group];
     reRenderFormGridPreserving(group, containerId);
@@ -1035,8 +1071,8 @@ document.addEventListener('change', async (ev) => {
 });
 
 async function addCategory(group){
-  const inputId = { expense: 'newCatExpense', savings: 'newCatSavings' }[group];
-  const ownerId = { expense: 'newCatExpenseOwner', savings: 'newCatSavingsOwner' }[group];
+  const inputId = { expense: 'newCatExpense', savings: 'newCatSavings', invest: 'newCatInvest' }[group];
+  const ownerId = { expense: 'newCatExpenseOwner', savings: 'newCatSavingsOwner', invest: 'newCatInvestOwner' }[group];
   const input = document.getElementById(inputId);
   const ownerSel = document.getElementById(ownerId);
   const name = input.value.trim();
@@ -1052,32 +1088,6 @@ async function addCategory(group){
   showToast(`"${name}" 카테고리를 추가했어요`);
 }
 window.addCategory = addCategory;
-
-async function addInvestCategory(){
-  const nameInput = document.getElementById('newCatInvest');
-  const ownerSel = document.getElementById('newCatInvestOwner');
-  const sharesInput = document.getElementById('newCatInvestShares');
-  const costInput = document.getElementById('newCatInvestCost');
-  const name = nameInput.value.trim();
-  if (!name) return;
-  if (state.categories.invest.some(c => c.name === name)){
-    showToast('이미 있는 종목이에요');
-    return;
-  }
-  state.categories.invest.push({
-    name,
-    owner: ownerSel.value,
-    shares: Number(sharesInput.value) || 0,
-    costBasis: Number(costInput.value) || 0,
-  });
-  nameInput.value = '';
-  sharesInput.value = '';
-  costInput.value = '';
-  await saveData();
-  renderAll();
-  showToast(`"${name}" 종목을 추가했어요`);
-}
-window.addInvestCategory = addInvestCategory;
 
 async function removeCategory(group, name){
   state.categories[group] = state.categories[group].filter(c => c.name !== name);
@@ -1266,127 +1276,147 @@ function render(){
   renderBudgetSection();
 }
 
-function buildSparkline(values){
-  if (values.length === 0){
-    return '<span style="font-size:11px; color:#9AA2AD;">기록 없음</span>';
-  }
-  const w = 60, h = 24, pad = 3;
-  const last = values[values.length - 1];
-  const color = last >= 0 ? 'var(--teal)' : 'var(--coral)';
-  if (values.length === 1){
-    return `<svg width="${w}" height="${h}"><circle cx="${w/2}" cy="${h/2}" r="3" fill="${color}"/></svg>`;
-  }
-  const min = Math.min(...values, 0);
-  const max = Math.max(...values, 0);
-  const range = (max - min) || 1;
-  const stepX = (w - pad*2) / (values.length - 1);
-  const points = values.map((v, i) => {
-    const x = pad + i*stepX;
-    const y = h - pad - ((v - min)/range) * (h - pad*2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(' ');
-  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-    <polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-  </svg>`;
-}
-
-function holdingPriceHistory(cat, sorted){
-  return sorted
-    .filter(e => e.invest && e.invest[cat.name] !== undefined && e.invest[cat.name] !== '' && e.invest[cat.name] !== null)
-    .map(e => ({ month: e.month, price: Number(e.invest[cat.name]) }));
-}
-
-function renderHoldingMetrics(row, cat, price){
-  const hasPrice = price !== null && price !== undefined && price !== '' && !isNaN(price) && Number(price) > 0;
-  const evalCell = row.querySelector('.eval-cell');
-  const returnCell = row.querySelector('.return-cell');
-  if (!hasPrice){
-    evalCell.textContent = '-';
-    returnCell.textContent = '-';
-    return;
-  }
-  const p = Number(price);
-  const evalAmt = investEval(cat, p);
-  const returnPct = cat.costBasis > 0 ? (p - cat.costBasis) / cat.costBasis * 100 : null;
-  evalCell.textContent = formatManwon(evalAmt);
-  if (returnPct === null){
-    returnCell.textContent = '-';
-  } else {
-    const pillClass = returnPct >= 0 ? 'good' : 'low';
-    returnCell.innerHTML = `<span class="rate-pill ${pillClass}">${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(1)}%</span>`;
-  }
-}
-
+// 표 안에서 현재가를 칠 때 평가금액/수익률을 즉시 갱신
 function updateHoldingLive(inp){
   if (inp.dataset.group !== 'invest') return;
+  if (inp.value === '') return; // 입력 전에는 최신 저장값 기반 표시를 유지
   const row = inp.closest('tr');
-  if (!row) return;
-  const cat = getCatDef('invest', inp.dataset.cat);
-  if (!cat) return;
-  renderHoldingMetrics(row, cat, inp.value);
+  const h = getHolding(inp.dataset.cat);
+  if (!row || !h) return;
+  const evalCell = row.querySelector('.eval-cell');
+  const returnCell = row.querySelector('.return-cell');
+  const p = Number(inp.value) || 0;
+  if (p <= 0){ evalCell.textContent = '-'; returnCell.textContent = '-'; return; }
+  evalCell.textContent = formatManwon(investEval(h, p));
+  const cost = Number(h.costBasis) || 0;
+  if (cost > 0){
+    const ret = (p - cost) / cost * 100;
+    returnCell.innerHTML = `<span class="rate-pill ${ret >= 0 ? 'good' : 'low'}">${ret >= 0 ? '+' : ''}${ret.toFixed(1)}%</span>`;
+  } else {
+    returnCell.textContent = '-';
+  }
 }
 
-let expandedHoldings = new Set();
+// 보유자(1차) / 투자 카테고리(2차) 접기 상태
+let collapsedOwners = new Set();
+let collapsedCats = new Set(); // key: owner + '|' + category
 
-function toggleHoldingDetail(name){
-  if (expandedHoldings.has(name)) expandedHoldings.delete(name);
-  else expandedHoldings.add(name);
+function toggleOwnerGroup(owner){
+  if (collapsedOwners.has(owner)) collapsedOwners.delete(owner);
+  else collapsedOwners.add(owner);
   reRenderHoldingsPreserving();
 }
-window.toggleHoldingDetail = toggleHoldingDetail;
+window.toggleOwnerGroup = toggleOwnerGroup;
+
+function toggleCatGroup(key){
+  if (collapsedCats.has(key)) collapsedCats.delete(key);
+  else collapsedCats.add(key);
+  reRenderHoldingsPreserving();
+}
+window.toggleCatGroup = toggleCatGroup;
+
+async function addHolding(){
+  const owner = state.owners[0] || '공동';
+  const category = state.categories.invest[0]?.name || '';
+  state.holdings.push({ id: genId(), owner, category, name: '', shares: 0, costBasis: 0 });
+  await saveData();
+  reRenderHoldingsPreserving();
+}
+window.addHolding = addHolding;
+
+async function removeHolding(id){
+  const h = getHolding(id);
+  if (!h) return;
+  if (!confirm(`"${h.name || '이 종목'}"을(를) 삭제할까요? 과거 월별 기록의 현재가도 함께 지워져요.`)) return;
+  state.holdings = state.holdings.filter(x => x.id !== id);
+  state.entries.forEach(e => { if (e.invest) delete e.invest[id]; });
+  await saveData();
+  render();
+  showToast('종목을 삭제했어요');
+}
+window.removeHolding = removeHolding;
+
+// 표 안의 종목 속성(보유자/카테고리/종목명/수량/단가) 수정 처리
+document.addEventListener('change', async (ev) => {
+  const el = ev.target;
+  if (!el.classList.contains('holding-field')) return;
+  const h = getHolding(el.dataset.id);
+  if (!h) return;
+  const field = el.dataset.field;
+  if (field === 'shares' || field === 'costBasis') h[field] = Number(el.value) || 0;
+  else h[field] = el.value;
+  await saveData();
+  reRenderHoldingsPreserving();
+  renderBudgetSection();
+});
+
+function holdingRowHTML(h, entryPrices){
+  const ownerList = state.owners.includes(h.owner) ? state.owners : [h.owner, ...state.owners];
+  const ownerOpts = ownerList.map(o => `<option value="${o}" ${o === h.owner ? 'selected' : ''}>${o}</option>`).join('');
+  const catNames = state.categories.invest.map(c => c.name);
+  const catList = (h.category && !catNames.includes(h.category)) ? [h.category, ...catNames] : catNames;
+  const catOpts = catList.map(c => `<option value="${c}" ${c === h.category ? 'selected' : ''}>${c}</option>`).join('');
+  const price = entryPrices[h.id];
+  const p = Number(price) || 0;
+  const cost = Number(h.costBasis) || 0;
+  const evalTxt = p > 0 ? formatManwon(investEval(h, p)) : '-';
+  let retTxt = '-';
+  if (p > 0 && cost > 0){
+    const ret = (p - cost) / cost * 100;
+    retTxt = `<span class="rate-pill ${ret >= 0 ? 'good' : 'low'}">${ret >= 0 ? '+' : ''}${ret.toFixed(1)}%</span>`;
+  }
+  return `<tr>
+    <td><select class="holding-field" data-id="${h.id}" data-field="owner">${ownerOpts}</select></td>
+    <td><select class="holding-field" data-id="${h.id}" data-field="category">${catOpts}</select></td>
+    <td><input type="text" class="holding-field" data-id="${h.id}" data-field="name" value="${(h.name || '').replace(/"/g, '&quot;')}" placeholder="종목명"></td>
+    <td><input type="number" min="0" class="holding-field" data-id="${h.id}" data-field="shares" value="${h.shares || ''}" placeholder="0"></td>
+    <td><input type="number" min="0" class="holding-field" data-id="${h.id}" data-field="costBasis" value="${h.costBasis || ''}" placeholder="원"></td>
+    <td><input type="number" min="0" placeholder="현재가(원)" data-group="invest" data-cat="${h.id}"></td>
+    <td class="eval-cell">${evalTxt}</td>
+    <td class="return-cell">${retTxt}</td>
+    <td><button type="button" class="danger-ghost" style="padding:3px 8px;" onclick="removeHolding('${h.id}')">삭제</button></td>
+  </tr>`;
+}
 
 function renderHoldings(){
   const body = document.getElementById('holdingsBody');
-  const holdings = state.categories.invest;
-  if (holdings.length === 0){
-    body.innerHTML = `<tr class="empty-row"><td colspan="7">아직 등록된 종목이 없어요. "카테고리 설정"에서 추가해보세요.</td></tr>`;
+  if (!state.holdings.length){
+    body.innerHTML = `<tr class="empty-row"><td colspan="9">아직 종목이 없어요. 아래 "+ 종목 추가"를 눌러 시작하세요.</td></tr>`;
     return;
   }
+  // 최신 저장된 월의 현재가를 초기 평가치로 사용
   const sorted = sortedEntries();
+  const latestEntry = sorted[sorted.length - 1];
+  const entryPrices = (latestEntry && latestEntry.invest) || {};
+
+  // 보유자 → 카테고리 순으로 그룹핑
+  const byOwner = {};
+  state.holdings.forEach(h => {
+    const o = h.owner || '공동';
+    (byOwner[o] = byOwner[o] || []).push(h);
+  });
+
   let rows = '';
-  holdings.forEach(cat => {
-    const history = holdingPriceHistory(cat, sorted);
-    const returnHistory = cat.costBasis > 0
-      ? history.map(h => (h.price - cat.costBasis) / cat.costBasis * 100)
-      : [];
-    const latestPrice = history.length ? history[history.length - 1].price : null;
-    const evalAmt = latestPrice !== null ? investEval(cat, latestPrice) : null;
-    const returnPct = (latestPrice !== null && cat.costBasis > 0)
-      ? (latestPrice - cat.costBasis) / cat.costBasis * 100
-      : null;
-    const pillClass = returnPct === null ? '' : (returnPct >= 0 ? 'good' : 'low');
-    const isExpanded = expandedHoldings.has(cat.name);
-    rows += `<tr>
-      <td class="holdings-name">
-        <button class="expand-btn" style="font-size:12px; padding:0 4px;" onclick="toggleHoldingDetail('${cat.name.replace(/'/g, "\\'")}')">${isExpanded ? '▲' : '▼'}</button>
-        ${cat.name} ${ownerTagHTML(cat.owner)}
-      </td>
-      <td>${Number(cat.shares) || 0}주</td>
-      <td>${formatWon(cat.costBasis)}</td>
-      <td><input type="number" min="0" placeholder="현재가(원)" data-group="invest" data-cat="${cat.name.replace(/"/g, '&quot;')}"></td>
-      <td class="eval-cell">${evalAmt !== null ? formatManwon(evalAmt) : '-'}</td>
-      <td class="return-cell">${returnPct !== null ? `<span class="rate-pill ${pillClass}">${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(1)}%</span>` : '-'}</td>
-      <td><div class="sparkline-cell">${buildSparkline(returnHistory)}</div></td>
+  Object.keys(byOwner).forEach(owner => {
+    const ownerCollapsed = collapsedOwners.has(owner);
+    rows += `<tr class="group-row" onclick="toggleOwnerGroup('${owner.replace(/'/g, "\\'")}')">
+      <td colspan="9"><span class="caret">${ownerCollapsed ? '▶' : '▼'}</span>${owner} <span style="font-weight:400; color:var(--ink-soft);">(${byOwner[owner].length}종목)</span></td>
     </tr>`;
-    if (isExpanded){
-      const monthRows = history.map(h => {
-        const evalAmt2 = investEval(cat, h.price);
-        const ret2 = cat.costBasis > 0 ? (h.price - cat.costBasis) / cat.costBasis * 100 : null;
-        const pillClass2 = ret2 === null ? '' : (ret2 >= 0 ? 'good' : 'low');
-        return `<tr>
-          <td class="month">${monthLabel(h.month)}</td>
-          <td>${formatWon(h.price)}</td>
-          <td>${formatManwon(evalAmt2)}</td>
-          <td>${ret2 !== null ? `<span class="rate-pill ${pillClass2}">${ret2 >= 0 ? '+' : ''}${ret2.toFixed(1)}%</span>` : '-'}</td>
-        </tr>`;
-      }).join('');
-      rows += `<tr class="detail-row"><td colspan="7">
-        <table>
-          <thead><tr><th>월</th><th>현재가</th><th>평가금액</th><th>수익률</th></tr></thead>
-          <tbody>${monthRows || '<tr class="empty-row"><td colspan="4">기록 없음</td></tr>'}</tbody>
-        </table>
-      </td></tr>`;
-    }
+    if (ownerCollapsed) return;
+    const byCat = {};
+    byOwner[owner].forEach(h => {
+      const c = h.category || '미분류';
+      (byCat[c] = byCat[c] || []).push(h);
+    });
+    Object.keys(byCat).forEach(cat => {
+      const key = owner + '|' + cat;
+      const catCollapsed = collapsedCats.has(key);
+      rows += `<tr class="group-row lvl2" onclick="toggleCatGroup('${key.replace(/'/g, "\\'")}')">
+        <td colspan="9"><span class="caret">${catCollapsed ? '▶' : '▼'}</span>${cat}</td>
+      </tr>`;
+      if (catCollapsed) return;
+      byCat[cat].forEach(h => { rows += holdingRowHTML(h, entryPrices); });
+    });
   });
   body.innerHTML = rows;
 }
@@ -1500,9 +1530,17 @@ function renderDonut(){
   const legendEl = document.getElementById('pieLegend');
   const entry = state.entries.find(e => e.month === sel.value);
   const rawData = entry ? (entry[pieGroup] || {}) : {};
-  const data = pieGroup === 'invest'
-    ? Object.fromEntries(Object.entries(rawData).map(([name, price]) => [name, investEval(getCatDef('invest', name), price)]))
-    : rawData;
+  let data = rawData;
+  if (pieGroup === 'invest'){
+    // 종목이 아니라 투자 카테고리(대분류) 단위로 평가금액을 합산해 보여준다
+    data = {};
+    Object.entries(rawData).forEach(([id, price]) => {
+      const h = getHolding(id);
+      if (!h) return;
+      const cat = h.category || '미분류';
+      data[cat] = (data[cat] || 0) + investEval(h, price);
+    });
+  }
   const filtered = Object.entries(data).filter(([,v]) => Number(v) > 0);
   const total = filtered.reduce((s,[,v]) => s + Number(v), 0);
 
@@ -1584,9 +1622,20 @@ function renderBudgetStatus(){
       if (!budget) return;
       const owner = cat.owner || '공동';
       if (budgetOwnerFilter !== '전체' && owner !== budgetOwnerFilter) return;
-      const raw = entry ? entry[group]?.[cat.name] : undefined;
-      const actual = raw !== undefined && raw !== '' ? Number(raw) : 0;
-      const formatter = group === 'invest' ? formatWon : formatManwon;
+      let actual = 0;
+      if (group === 'invest'){
+        // 이 대분류에 속한 종목들의 평가금액 합산 (만원)
+        const prices = (entry && entry.invest) || {};
+        state.holdings.forEach(h => {
+          if ((h.category || '미분류') === cat.name && prices[h.id] !== undefined){
+            actual += investEval(h, prices[h.id]);
+          }
+        });
+      } else {
+        const raw = entry ? entry[group]?.[cat.name] : undefined;
+        actual = raw !== undefined && raw !== '' ? Number(raw) : 0;
+      }
+      const formatter = formatManwon;
       const remaining = budget - actual;
       const pct = Math.min(100, Math.max(0, (actual / budget) * 100));
       const over = group === 'expense' ? actual > budget : actual >= budget;
@@ -1707,20 +1756,11 @@ document.getElementById('newOwnerName').addEventListener('keydown', (ev) => {
   }
 });
 
-['newCatExpense','newCatSavings'].forEach(id => {
+[['newCatExpense','expense'],['newCatSavings','savings'],['newCatInvest','invest']].forEach(([id, group]) => {
   document.getElementById(id).addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter'){
       ev.preventDefault();
-      addCategory(id === 'newCatExpense' ? 'expense' : 'savings');
-    }
-  });
-});
-
-['newCatInvest','newCatInvestShares','newCatInvestCost'].forEach(id => {
-  document.getElementById(id).addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter'){
-      ev.preventDefault();
-      addInvestCategory();
+      addCategory(group);
     }
   });
 });
