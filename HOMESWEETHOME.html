@@ -77,10 +77,9 @@
   }
   .goal-stats{
     display:grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     gap: 12px;
   }
-  @media (max-width: 520px){ .goal-stats{grid-template-columns: 1fr 1fr;} }
   .stat{
     background: var(--bg);
     border-radius: 10px;
@@ -528,14 +527,6 @@
           <div class="value" id="statRemaining">-</div>
         </div>
         <div class="stat">
-          <div class="label">평균 월 순증가</div>
-          <div class="value teal" id="statAvg">-</div>
-        </div>
-        <div class="stat">
-          <div class="label">예상 도달</div>
-          <div class="value" id="statEta">-</div>
-        </div>
-        <div class="stat">
           <div class="label">진행률</div>
           <div class="value gold" id="statPct">-</div>
         </div>
@@ -703,7 +694,7 @@
             <th>소비</th>
             <th>저축</th>
             <th>투자</th>
-            <th></th>
+            <th>저축+투자</th>
             <th></th>
             <th></th>
           </tr>
@@ -949,17 +940,6 @@ function currentAsset(){
   const savingsCum = sorted.reduce((s,e)=> s + sumGroup(e.savings), 0);
   const investLatest = sorted.length ? investTotalForEntry(sorted[sorted.length-1].invest) : 0;
   return savingsCum + investLatest;
-}
-
-function avgMonthlyContribution(){
-  const sorted = sortedEntries();
-  if (sorted.length === 0) return 0;
-  const startIdx = Math.max(0, sorted.length - 6);
-  let sum = 0;
-  for (let i = startIdx; i < sorted.length; i++){
-    sum += netContributionFor(sorted, i);
-  }
-  return sum / (sorted.length - startIdx);
 }
 
 // ---- owner management ----
@@ -1268,30 +1248,11 @@ function render(){
   const target = state.targetAsset;
   const remaining = Math.max(0, target - current);
   const pct = target > 0 ? Math.min(100, (current/target)*100) : 0;
-  const avg = avgMonthlyContribution();
 
   document.getElementById('statCurrent').textContent = formatManwon(current);
   document.getElementById('statTarget').textContent = formatManwon(target);
   document.getElementById('statRemaining').textContent = remaining <= 0 ? '달성!' : formatManwon(remaining);
-  document.getElementById('statAvg').textContent = state.entries.length === 0
-    ? '기록 필요'
-    : (avg >= 0 ? '+' : '-') + formatManwon(Math.abs(avg)) + '/월';
   document.getElementById('statPct').textContent = pct.toFixed(1) + '%';
-
-  let etaText = '-';
-  if (remaining <= 0){
-    etaText = '목표 달성';
-  } else if (avg > 0){
-    const monthsLeft = Math.ceil(remaining / avg);
-    const d = new Date();
-    d.setMonth(d.getMonth() + monthsLeft);
-    etaText = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')} (${monthsLeft}개월)`;
-  } else if (state.entries.length > 0){
-    etaText = '자산 감소 중';
-  } else {
-    etaText = '기록 필요';
-  }
-  document.getElementById('statEta').textContent = etaText;
 
   document.getElementById('goalHeadline').textContent =
     remaining <= 0 ? '목표 자산 달성했어요' : `목표까지 ${formatManwon(remaining)} 남았어요`;
@@ -1438,47 +1399,21 @@ function renderHistory(){
   }
   const sorted = sortedEntries();
   let rows = '';
-  sorted.forEach((e, idx) => {
+  sorted.forEach((e) => {
     const expenseTotal = sumGroup(e.expense);
     const savingsTotal = sumGroup(e.savings);
     const investTotal = investTotalForEntry(e.invest);
-    const isExpanded = expandedMonths.has(e.month);
+    const saveInvestSum = savingsTotal + investTotal;
     rows += `<tr>
       <td class="month">${monthLabel(e.month)}</td>
       <td>${formatManwon(e.income)}</td>
       <td>${formatManwon(expenseTotal)}</td>
       <td>${formatManwon(savingsTotal)}</td>
       <td>${formatManwon(investTotal)}</td>
+      <td>${formatManwon(saveInvestSum)}</td>
       <td><button class="ghost" style="padding:4px 10px; font-size:11.5px;" onclick="editEntry('${e.month}')">수정</button></td>
-      <td><button class="expand-btn" onclick="toggleDetail('${e.month}')">${isExpanded ? '▲' : '▼'}</button></td>
       <td><button class="danger-ghost" onclick="deleteEntry('${e.month}')">삭제</button></td>
     </tr>`;
-    if (isExpanded){
-      const catLine = (obj, group) => Object.entries(obj || {})
-        .filter(([,v]) => Number(v) > 0)
-        .map(([k,v]) => {
-          const catDef = getCatDef(group, k);
-          const owner = catDef?.owner || '공동';
-          const ownerTag = ownerTagHTML(owner);
-          if (group === 'invest'){
-            const evalAmt = investEval(catDef, v);
-            const returnPct = catDef && catDef.costBasis > 0 ? (Number(v) - catDef.costBasis) / catDef.costBasis * 100 : null;
-            const pillClass = returnPct === null ? '' : (returnPct >= 0 ? 'good' : 'low');
-            return `<span>${k} ${ownerTag} <b>${formatWon(v)}</b> → ${formatManwon(evalAmt)}${returnPct !== null ? ` <span class="rate-pill ${pillClass}" style="padding:1px 6px;">${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(1)}%</span>` : ''}</span>`;
-          }
-          const budget = (state.budgets?.[group] || {})[k];
-          const over = group === 'expense' && budget && Number(v) > budget;
-          return `<span>${k} ${ownerTag} <b>${formatManwon(v)}</b>${over ? ' <span style="color:var(--coral); font-size:11px;">초과</span>' : ''}</span>`;
-        }).join('');
-      const investDelta = investDeltaFor(sorted, idx);
-      const deltaText = `<span style="color:${investDelta >= 0 ? 'var(--teal)' : 'var(--coral)'}; font-size:11px;">(전월 대비 ${investDelta >= 0 ? '+' : '-'}${formatManwon(Math.abs(investDelta))})</span>`;
-      rows += `<tr class="detail-row"><td colspan="8">
-        <div class="detail-cats">${catLine(e.expense, 'expense') || '<span>소비 내역 없음</span>'}</div>
-        ${catLine(e.savings, 'savings') ? `<div class="detail-cats" style="margin-top:8px;">${catLine(e.savings, 'savings')}</div>` : ''}
-        ${catLine(e.invest, 'invest') ? `<div class="detail-cats" style="margin-top:8px;"><span style="color:var(--ink-soft); font-size:11px;">투자 종목 (현재가 → 평가금액)</span> ${deltaText}</div>
-        <div class="detail-cats" style="margin-top:4px;">${catLine(e.invest, 'invest')}</div>` : ''}
-      </td></tr>`;
-    }
   });
   body.innerHTML = rows;
 }
@@ -1498,13 +1433,6 @@ function editEntry(month){
   showToast(`${monthLabel(month)} 데이터를 불러왔어요. 수정 후 저장하세요.`);
 }
 window.editEntry = editEntry;
-
-function toggleDetail(month){
-  if (expandedMonths.has(month)) expandedMonths.delete(month);
-  else expandedMonths.add(month);
-  renderHistory();
-}
-window.toggleDetail = toggleDetail;
 
 function renderChart(){
   const el = document.getElementById('chartBars');
