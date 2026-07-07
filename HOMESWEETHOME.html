@@ -165,6 +165,17 @@
   .add-cat-row button{
     background: var(--ink); color:#fff; font-size:13px; padding: 8px 16px;
   }
+  .chip-budget{
+    width: 56px;
+    border: none;
+    background: transparent;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    text-align: right;
+    padding: 2px 4px;
+    color: var(--ink-soft);
+  }
+  .chip-budget:focus{outline: 1px solid var(--gold); border-radius:4px; color:var(--ink);}
 
   /* Form */
   form.entry-form{
@@ -204,6 +215,8 @@
     background: var(--bg);
   }
   .field input:focus{outline: 2px solid var(--gold-soft); border-color: var(--gold);}
+  .field input.over-budget{border-color: var(--coral); background: var(--coral-soft);}
+  .field input.goal-met{border-color: var(--teal); background: var(--teal-soft);}
   .form-actions{
     display:flex;
     justify-content:space-between;
@@ -310,8 +323,56 @@
   }
   .bar-label{font-size:10.5px; color: var(--ink-soft); font-family:'IBM Plex Mono',monospace;}
 
-  .reset-row{
+  /* pie / donut chart */
+  .pie-tabs{display:flex; gap:8px; margin-bottom:16px;}
+  .pie-tab{
+    background: var(--bg); border:1px solid var(--border); color:var(--ink-soft);
+    font-size:12.5px; font-weight:600; padding:6px 14px; border-radius:20px; cursor:pointer;
+  }
+  .pie-tab.active{background:var(--ink); color:#fff; border-color:var(--ink);}
+  .pie-wrap{display:flex; gap:28px; align-items:center; flex-wrap:wrap;}
+  .donut{
+    position:relative;
+    width:150px; height:150px; border-radius:50%;
+    flex-shrink:0;
+    background: var(--bg);
+  }
+  .donut::after{
+    content:'';
+    position:absolute;
+    top:50%; left:50%;
+    width:58%; height:58%;
+    background: var(--surface);
+    border-radius:50%;
+    transform:translate(-50%,-50%);
+  }
+  .pie-legend{flex:1; min-width:180px; display:flex; flex-direction:column; gap:9px;}
+  .pie-legend-item{display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px;}
+  .pie-legend-item .name{display:flex; align-items:center; gap:8px; color:var(--ink-soft);}
+  .pie-legend-item .swatch{width:10px; height:10px; border-radius:3px; display:inline-block; flex-shrink:0;}
+  .pie-legend-item .amt{font-family:'IBM Plex Mono', monospace; font-weight:600; white-space:nowrap;}
+  .pie-month-select{
+    margin-left:auto;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:5px 8px;
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  .data-actions{
     margin-top: 30px;
+    display:flex;
+    justify-content:center;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+  .data-actions button, .data-actions label{font-size:12px; color:#8A8271;}
+
+  .reset-row{
+    margin-top: 12px;
     text-align:center;
   }
   .reset-row button{font-size:12px; color:#B8B0A0;}
@@ -454,7 +515,21 @@
   </section>
 
   <section>
-    <div class="section-title"><span class="n">03</span> 히스토리</div>
+    <div class="section-title">
+      <span class="n">03</span> 카테고리 비중
+      <select class="pie-month-select" id="pieMonthSelect"></select>
+    </div>
+    <div class="card">
+      <div class="pie-tabs" id="pieTabs"></div>
+      <div class="pie-wrap">
+        <div class="donut" id="donutChart"></div>
+        <div class="pie-legend" id="pieLegend"></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title"><span class="n">04</span> 히스토리</div>
     <div class="card" style="padding: 8px 16px 16px;">
       <table>
         <thead>
@@ -466,6 +541,7 @@
             <th>저축률</th>
             <th></th>
             <th></th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="historyBody">
@@ -474,6 +550,13 @@
     </div>
   </section>
 
+  <div class="data-actions">
+    <button class="ghost" id="exportBtn">데이터 내보내기</button>
+    <label class="ghost" style="cursor:pointer; display:inline-flex; align-items:center; padding:10px 18px; border:1px solid var(--border); border-radius:8px;">
+      데이터 가져오기
+      <input type="file" id="importFile" accept="application/json" style="display:none;">
+    </label>
+  </div>
   <div class="reset-row">
     <button class="ghost" id="resetBtn">전체 데이터 초기화</button>
   </div>
@@ -493,11 +576,19 @@ const DEFAULT_DATA = {
     savings: [],
     invest: []
   },
+  budgets: { // {group: {cat: monthlyBudgetInManwon}}
+    expense: {},
+    savings: {},
+    invest: {}
+  },
   entries: [] // {month, income, expense:{cat:amt}, savings:{cat:amt}, invest:{cat:amt}}
 };
 
+const PIE_COLORS = ['#B8892F','#3D6B63','#BE5039','#6D8FB0','#8A6BB0','#C9A62B','#5B8C5A','#B0587A'];
+
 let state = JSON.parse(JSON.stringify(DEFAULT_DATA));
 let expandedMonths = new Set();
+let pieGroup = 'expense';
 
 function formatManwon(v){
   const n = Math.round(v);
@@ -529,6 +620,11 @@ async function loadData(){
           expense: parsed.categories?.expense ?? DEFAULT_DATA.categories.expense,
           savings: parsed.categories?.savings ?? DEFAULT_DATA.categories.savings,
           invest: parsed.categories?.invest ?? DEFAULT_DATA.categories.invest,
+        },
+        budgets: {
+          expense: parsed.budgets?.expense ?? {},
+          savings: parsed.budgets?.savings ?? {},
+          invest: parsed.budgets?.invest ?? {},
         },
         entries: parsed.entries ?? []
       };
@@ -602,12 +698,31 @@ function renderChips(group, containerId){
     el.innerHTML = `<span style="font-size:12.5px; color:#9AA2AD;">아직 카테고리가 없어요. 아래에 추가해보세요.</span>`;
     return;
   }
-  el.innerHTML = state.categories[group].map(name => `
+  el.innerHTML = state.categories[group].map(name => {
+    const budget = (state.budgets?.[group] || {})[name] || '';
+    return `
     <div class="chip">
       <span>${name}</span>
+      <input type="number" class="chip-budget" min="0" placeholder="예산" title="월 예산(만원)"
+        value="${budget}" data-group="${group}" data-cat="${name.replace(/"/g, '&quot;')}">
       <button onclick="removeCategory('${group}', '${name.replace(/'/g, "\\'")}')" title="삭제">×</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
+
+document.addEventListener('change', async (ev) => {
+  if (!ev.target.classList.contains('chip-budget')) return;
+  const group = ev.target.dataset.group;
+  const cat = ev.target.dataset.cat;
+  const val = Number(ev.target.value) || 0;
+  if (!state.budgets) state.budgets = { expense:{}, savings:{}, invest:{} };
+  if (!state.budgets[group]) state.budgets[group] = {};
+  if (val > 0) state.budgets[group][cat] = val;
+  else delete state.budgets[group][cat];
+  await saveData();
+  const containerId = { expense:'gridExpense', savings:'gridSavings', invest:'gridInvest' }[group];
+  reRenderFormGridPreserving(group, containerId);
+});
 
 async function addCategory(group){
   const inputId = { expense: 'newCatExpense', savings: 'newCatSavings', invest: 'newCatInvest' }[group];
@@ -641,11 +756,43 @@ function renderFormGrid(group, containerId){
     el.innerHTML = `<div style="font-size:12.5px; color:#9AA2AD;">위 "카테고리 설정"에서 항목을 먼저 추가해주세요.</div>`;
     return;
   }
-  el.innerHTML = state.categories[group].map(name => `
+  el.innerHTML = state.categories[group].map(name => {
+    const budget = (state.budgets?.[group] || {})[name];
+    return `
     <div class="field">
       <label>${name}</label>
       <input type="number" min="0" placeholder="0" data-group="${group}" data-cat="${name.replace(/"/g, '&quot;')}">
-    </div>`).join('');
+      ${budget ? `<div class="hint">예산 ${formatManwon(budget)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function applyBudgetStyle(inp){
+  const group = inp.dataset.group;
+  const cat = inp.dataset.cat;
+  inp.classList.remove('over-budget', 'goal-met');
+  if (!group || !cat) return;
+  const budget = (state.budgets?.[group] || {})[cat];
+  if (!budget) return;
+  const val = Number(inp.value) || 0;
+  if (val <= 0) return;
+  if (group === 'expense'){
+    if (val > budget) inp.classList.add('over-budget');
+  } else {
+    if (val >= budget) inp.classList.add('goal-met');
+  }
+}
+
+function reRenderFormGridPreserving(group, containerId){
+  const el = document.getElementById(containerId);
+  const prevValues = {};
+  el.querySelectorAll('input[data-cat]').forEach(inp => { prevValues[inp.dataset.cat] = inp.value; });
+  renderFormGrid(group, containerId);
+  el.querySelectorAll('input[data-cat]').forEach(inp => {
+    if (prevValues[inp.dataset.cat] !== undefined) inp.value = prevValues[inp.dataset.cat];
+    inp.addEventListener('input', () => { updateSavingsPreview(); applyBudgetStyle(inp); });
+    applyBudgetStyle(inp);
+  });
 }
 
 function collectFormGroup(group){
@@ -677,7 +824,11 @@ function renderAll(){
   renderFormGrid('savings', 'gridSavings');
   renderFormGrid('invest', 'gridInvest');
   document.querySelectorAll('.entry-form input[type=number]').forEach(inp => {
-    inp.addEventListener('input', updateSavingsPreview);
+    inp.addEventListener('input', () => {
+      updateSavingsPreview();
+      applyBudgetStyle(inp);
+    });
+    applyBudgetStyle(inp);
   });
   updateSavingsPreview();
 }
@@ -719,12 +870,13 @@ function render(){
   renderAll();
   renderHistory();
   renderChart();
+  renderPie();
 }
 
 function renderHistory(){
   const body = document.getElementById('historyBody');
   if (state.entries.length === 0){
-    body.innerHTML = `<tr class="empty-row"><td colspan="7">아직 기록이 없어요. 이번 달 내역을 입력해보세요.</td></tr>`;
+    body.innerHTML = `<tr class="empty-row"><td colspan="8">아직 기록이 없어요. 이번 달 내역을 입력해보세요.</td></tr>`;
     return;
   }
   const sorted = [...state.entries].sort((a,b)=> a.month.localeCompare(b.month));
@@ -741,21 +893,42 @@ function renderHistory(){
       <td>${formatManwon(expenseTotal)}</td>
       <td>${formatManwon(savingsInvestTotal)}</td>
       <td><span class="rate-pill ${pillClass}">${rate.toFixed(0)}%</span></td>
+      <td><button class="ghost" style="padding:4px 10px; font-size:11.5px;" onclick="editEntry('${e.month}')">수정</button></td>
       <td><button class="expand-btn" onclick="toggleDetail('${e.month}')">${isExpanded ? '▲' : '▼'}</button></td>
       <td><button class="danger-ghost" onclick="deleteEntry('${e.month}')">삭제</button></td>
     </tr>`;
     if (isExpanded){
-      const catLine = (obj) => Object.entries(obj || {})
+      const catLine = (obj, group) => Object.entries(obj || {})
         .filter(([,v]) => Number(v) > 0)
-        .map(([k,v]) => `<span>${k} <b>${formatManwon(v)}</b></span>`).join('');
-      rows += `<tr class="detail-row"><td colspan="7">
-        <div class="detail-cats">${catLine(e.expense) || '<span>소비 내역 없음</span>'}</div>
-        <div class="detail-cats" style="margin-top:8px;">${catLine(e.savings)}${catLine(e.invest) || ''}</div>
+        .map(([k,v]) => {
+          const budget = (state.budgets?.[group] || {})[k];
+          const over = group === 'expense' && budget && Number(v) > budget;
+          return `<span>${k} <b>${formatManwon(v)}</b>${over ? ' <span style="color:var(--coral); font-size:11px;">초과</span>' : ''}</span>`;
+        }).join('');
+      rows += `<tr class="detail-row"><td colspan="8">
+        <div class="detail-cats">${catLine(e.expense, 'expense') || '<span>소비 내역 없음</span>'}</div>
+        <div class="detail-cats" style="margin-top:8px;">${catLine(e.savings, 'savings')}${catLine(e.invest, 'invest') || ''}</div>
       </td></tr>`;
     }
   });
   body.innerHTML = rows;
 }
+
+function editEntry(month){
+  const e = state.entries.find(x => x.month === month);
+  if (!e) return;
+  document.getElementById('fMonth').value = e.month;
+  document.getElementById('fIncome').value = e.income;
+  document.querySelectorAll('.entry-form input[data-group]').forEach(inp => {
+    const val = (e[inp.dataset.group] || {})[inp.dataset.cat];
+    inp.value = val || '';
+    applyBudgetStyle(inp);
+  });
+  updateSavingsPreview();
+  document.getElementById('entryForm').scrollIntoView({ behavior:'smooth', block:'start' });
+  showToast(`${monthLabel(month)} 데이터를 불러왔어요. 수정 후 저장하세요.`);
+}
+window.editEntry = editEntry;
 
 function toggleDetail(month){
   if (expandedMonths.has(month)) expandedMonths.delete(month);
@@ -781,6 +954,78 @@ function renderChart(){
       <div class="bar-label">${monthLabel(e.month)}</div>
     </div>`;
   }).join('');
+}
+
+function renderPieMonthSelect(){
+  const sel = document.getElementById('pieMonthSelect');
+  const sorted = [...state.entries].sort((a,b)=> b.month.localeCompare(a.month));
+  if (sorted.length === 0){
+    sel.innerHTML = '<option value="">-</option>';
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  const keep = sorted.some(e => e.month === sel.value) ? sel.value : sorted[0].month;
+  sel.innerHTML = sorted.map(e =>
+    `<option value="${e.month}" ${e.month === keep ? 'selected' : ''}>${monthLabel(e.month)}</option>`
+  ).join('');
+}
+
+function renderPieTabs(){
+  const el = document.getElementById('pieTabs');
+  const labels = { expense:'소비', savings:'저축', invest:'투자' };
+  el.innerHTML = Object.keys(labels).map(g =>
+    `<button type="button" class="pie-tab ${g === pieGroup ? 'active' : ''}" data-group="${g}">${labels[g]}</button>`
+  ).join('');
+  el.querySelectorAll('.pie-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pieGroup = btn.dataset.group;
+      renderPieTabs();
+      renderDonut();
+    });
+  });
+}
+
+function renderDonut(){
+  const sel = document.getElementById('pieMonthSelect');
+  const donutEl = document.getElementById('donutChart');
+  const legendEl = document.getElementById('pieLegend');
+  const entry = state.entries.find(e => e.month === sel.value);
+  const data = entry ? (entry[pieGroup] || {}) : {};
+  const filtered = Object.entries(data).filter(([,v]) => Number(v) > 0);
+  const total = filtered.reduce((s,[,v]) => s + Number(v), 0);
+
+  if (!entry || filtered.length === 0){
+    donutEl.style.background = 'var(--bg)';
+    legendEl.innerHTML = `<div style="color:#9AA2AD; font-size:13px;">표시할 데이터가 없어요</div>`;
+    return;
+  }
+
+  let cumulative = 0;
+  const stops = filtered.map(([,v], i) => {
+    const pct = (Number(v) / total) * 100;
+    const start = cumulative;
+    cumulative += pct;
+    return `${PIE_COLORS[i % PIE_COLORS.length]} ${start}% ${cumulative}%`;
+  }).join(', ');
+  donutEl.style.background = `conic-gradient(${stops})`;
+
+  legendEl.innerHTML = filtered
+    .map(([cat, v], i) => ({ cat, v: Number(v), color: PIE_COLORS[i % PIE_COLORS.length] }))
+    .sort((a, b) => b.v - a.v)
+    .map(({ cat, v, color }) => {
+      const pct = (v / total * 100).toFixed(0);
+      return `<div class="pie-legend-item">
+        <span class="name"><span class="swatch" style="background:${color}"></span>${cat}</span>
+        <span class="amt">${formatManwon(v)} · ${pct}%</span>
+      </div>`;
+    }).join('');
+}
+
+function renderPie(){
+  renderPieMonthSelect();
+  renderPieTabs();
+  renderDonut();
 }
 
 async function deleteEntry(month){
@@ -827,6 +1072,57 @@ document.getElementById('resetBtn').addEventListener('click', async () => {
   await saveData();
   render();
   showToast('초기화했어요');
+});
+
+document.getElementById('pieMonthSelect').addEventListener('change', renderDonut);
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const dataStr = JSON.stringify(state, null, 2);
+  const blob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const today = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `homesweethome-backup-${today}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('데이터를 내보냈어요');
+});
+
+document.getElementById('importFile').addEventListener('change', async (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  try{
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.entries)){
+      throw new Error('invalid format');
+    }
+    if (!confirm('가져온 데이터로 현재 데이터를 덮어쓸까요?')){ return; }
+    state = {
+      baseAsset: parsed.baseAsset ?? DEFAULT_DATA.baseAsset,
+      targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
+      categories: {
+        expense: parsed.categories?.expense ?? [],
+        savings: parsed.categories?.savings ?? [],
+        invest: parsed.categories?.invest ?? [],
+      },
+      budgets: {
+        expense: parsed.budgets?.expense ?? {},
+        savings: parsed.budgets?.savings ?? {},
+        invest: parsed.budgets?.invest ?? {},
+      },
+      entries: parsed.entries ?? []
+    };
+    expandedMonths = new Set();
+    await saveData();
+    render();
+    showToast('데이터를 가져왔어요');
+  }catch(e){
+    showToast('가져오기에 실패했어요. 파일 형식을 확인해주세요.');
+  }finally{
+    ev.target.value = '';
+  }
 });
 
 // enter key adds category
