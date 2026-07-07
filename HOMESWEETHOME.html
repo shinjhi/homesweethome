@@ -196,9 +196,20 @@
     background: var(--border);
     color: var(--ink-soft);
   }
-  .owner-tag[data-owner="나"]{background:var(--gold-soft); color:var(--gold);}
-  .owner-tag[data-owner="남편"]{background:var(--teal-soft); color:var(--teal);}
-  .owner-tag[data-owner="공동"]{background:var(--border); color:var(--ink-soft);}
+  .owner-chip{
+    display:flex; align-items:center; gap:6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 5px 6px 5px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight:600;
+  }
+  .owner-chip button{
+    background:none; border:none; padding:2px 4px;
+    color:#9AA2AD; font-size:14px; line-height:1; cursor:pointer; border-radius:50%;
+  }
+  .owner-chip button:hover{color:var(--coral);}
 
   /* Form */
   form.entry-form{
@@ -475,15 +486,19 @@
     <div class="section-title"><span class="n">00</span> 카테고리 설정</div>
     <div class="card cat-groups">
       <div class="cat-group">
+        <div class="cat-group-label">보유자 목록</div>
+        <div class="chip-row" id="chipsOwners"></div>
+        <div class="add-cat-row">
+          <input type="text" id="newOwnerName" placeholder="예: 민지, 시아버지">
+          <button onclick="addOwner()">추가</button>
+        </div>
+      </div>
+      <div class="cat-group">
         <div class="cat-group-label"><span class="dot expense"></span>소비 카테고리</div>
         <div class="chip-row" id="chipsExpense"></div>
         <div class="add-cat-row">
           <input type="text" id="newCatExpense" placeholder="예: 육아, 경조사비">
-          <select id="newCatExpenseOwner">
-            <option value="공동">공동</option>
-            <option value="나">나</option>
-            <option value="남편">남편</option>
-          </select>
+          <select id="newCatExpenseOwner"></select>
           <button onclick="addCategory('expense')">추가</button>
         </div>
       </div>
@@ -492,11 +507,7 @@
         <div class="chip-row" id="chipsSavings"></div>
         <div class="add-cat-row">
           <input type="text" id="newCatSavings" placeholder="예: 비상금 통장">
-          <select id="newCatSavingsOwner">
-            <option value="공동">공동</option>
-            <option value="나">나</option>
-            <option value="남편">남편</option>
-          </select>
+          <select id="newCatSavingsOwner"></select>
           <button onclick="addCategory('savings')">추가</button>
         </div>
       </div>
@@ -505,11 +516,7 @@
         <div class="chip-row" id="chipsInvest"></div>
         <div class="add-cat-row">
           <input type="text" id="newCatInvest" placeholder="종목명 (예: 삼성전자)">
-          <select id="newCatInvestOwner">
-            <option value="공동">공동</option>
-            <option value="나">나</option>
-            <option value="남편">남편</option>
-          </select>
+          <select id="newCatInvestOwner"></select>
           <input type="number" id="newCatInvestShares" placeholder="보유수량(주)" min="0">
           <input type="number" id="newCatInvestCost" placeholder="매입단가(원)" min="0">
           <button onclick="addInvestCategory()">추가</button>
@@ -642,6 +649,7 @@ const STORAGE_KEY = 'home-budget-data-v2';
 const DEFAULT_DATA = {
   baseAsset: 54000,   // 5.4억 in 만원
   targetAsset: 85000, // 8.5억 in 만원
+  owners: ['공동', '나', '남편'],
   categories: {
     expense: [],
     savings: [],
@@ -656,6 +664,15 @@ const DEFAULT_DATA = {
 };
 
 const PIE_COLORS = ['#B8892F','#3D6B63','#BE5039','#6D8FB0','#8A6BB0','#C9A62B','#5B8C5A','#B0587A'];
+
+const OWNER_PALETTE = [
+  { bg: 'var(--gold-soft)', fg: 'var(--gold)' },
+  { bg: 'var(--teal-soft)', fg: 'var(--teal)' },
+  { bg: 'var(--coral-soft)', fg: 'var(--coral)' },
+  { bg: '#E3E8F0', fg: '#4C5D77' },
+  { bg: '#EDE3F5', fg: '#7A4F9E' },
+  { bg: '#DDEFD8', fg: '#3E7A3B' },
+];
 
 let state = JSON.parse(JSON.stringify(DEFAULT_DATA));
 let expandedMonths = new Set();
@@ -672,6 +689,19 @@ function formatManwon(v){
 
 function formatWon(v){
   return Math.round(v || 0).toLocaleString('ko-KR') + '원';
+}
+
+function ownerColor(owner){
+  if (!owner || owner === '공동') return { bg: 'var(--border)', fg: 'var(--ink-soft)' };
+  let hash = 0;
+  for (let i = 0; i < owner.length; i++) hash = (hash * 31 + owner.charCodeAt(i)) >>> 0;
+  return OWNER_PALETTE[hash % OWNER_PALETTE.length];
+}
+
+function ownerTagHTML(owner){
+  const o = owner || '공동';
+  const c = ownerColor(o);
+  return `<span class="owner-tag" style="background:${c.bg}; color:${c.fg};">${o}</span>`;
 }
 
 function getCatDef(group, name){
@@ -727,6 +757,7 @@ async function loadData(){
       state = {
         baseAsset: parsed.baseAsset ?? DEFAULT_DATA.baseAsset,
         targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
+        owners: (Array.isArray(parsed.owners) && parsed.owners.length) ? parsed.owners : DEFAULT_DATA.owners,
         categories: normalizeCategories(parsed.categories),
         budgets: {
           expense: parsed.budgets?.expense ?? {},
@@ -815,6 +846,54 @@ function buildBuildingSVG(pct){
   </svg>`;
 }
 
+// ---- owner management ----
+function renderOwnerChips(){
+  const el = document.getElementById('chipsOwners');
+  el.innerHTML = state.owners.map(o => {
+    const c = ownerColor(o);
+    const removable = o !== '공동';
+    return `<div class="owner-chip" style="color:${c.fg};">
+      <span>${o}</span>
+      ${removable ? `<button onclick="removeOwner('${o.replace(/'/g, "\\'")}')" title="삭제">×</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderOwnerSelects(){
+  ['newCatExpenseOwner', 'newCatSavingsOwner', 'newCatInvestOwner'].forEach(id => {
+    const sel = document.getElementById(id);
+    const keep = state.owners.includes(sel.value) ? sel.value : (state.owners[0] || '공동');
+    sel.innerHTML = state.owners.map(o => `<option value="${o}" ${o === keep ? 'selected' : ''}>${o}</option>`).join('');
+  });
+}
+
+async function addOwner(){
+  const input = document.getElementById('newOwnerName');
+  const name = input.value.trim();
+  if (!name) return;
+  if (state.owners.includes(name)){
+    showToast('이미 있는 보유자예요');
+    return;
+  }
+  state.owners.push(name);
+  input.value = '';
+  await saveData();
+  renderOwnerChips();
+  renderOwnerSelects();
+  showToast(`"${name}" 보유자를 추가했어요`);
+}
+window.addOwner = addOwner;
+
+async function removeOwner(name){
+  if (name === '공동') return;
+  state.owners = state.owners.filter(o => o !== name);
+  await saveData();
+  renderOwnerChips();
+  renderOwnerSelects();
+  showToast(`"${name}" 보유자를 삭제했어요`);
+}
+window.removeOwner = removeOwner;
+
 // ---- category management ----
 function renderChips(group, containerId){
   const el = document.getElementById(containerId);
@@ -832,7 +911,7 @@ function renderChips(group, containerId){
     return `
     <div class="chip">
       <span>${cat.name}</span>
-      <span class="owner-tag" data-owner="${cat.owner || '공동'}">${cat.owner || '공동'}</span>
+      ${ownerTagHTML(cat.owner)}
       ${meta}
       <input type="number" class="chip-budget" min="0" placeholder="${placeholder}" title="${title}"
         value="${budget}" data-group="${group}" data-cat="${cat.name.replace(/"/g, '&quot;')}">
@@ -925,7 +1004,7 @@ function renderFormGrid(group, containerId){
       if (budget) hints.push(`목표가 ${formatWon(budget)}`);
       return `
       <div class="field">
-        <label>${cat.name} <span class="owner-tag" data-owner="${cat.owner || '공동'}">${cat.owner || '공동'}</span></label>
+        <label>${cat.name} ${ownerTagHTML(cat.owner)}</label>
         <input type="number" min="0" placeholder="현재가(원)" data-group="invest" data-cat="${cat.name.replace(/"/g, '&quot;')}">
         <div class="hint">${hints.join(' · ')}</div>
       </div>`;
@@ -937,7 +1016,7 @@ function renderFormGrid(group, containerId){
     const budget = (state.budgets?.[group] || {})[cat.name];
     return `
     <div class="field">
-      <label>${cat.name} <span class="owner-tag" data-owner="${cat.owner || '공동'}">${cat.owner || '공동'}</span></label>
+      <label>${cat.name} ${ownerTagHTML(cat.owner)}</label>
       <input type="number" min="0" placeholder="0" data-group="${group}" data-cat="${cat.name.replace(/"/g, '&quot;')}">
       ${budget ? `<div class="hint">${budgetLabel} ${formatManwon(budget)}</div>` : ''}
     </div>`;
@@ -1004,6 +1083,8 @@ function updateSavingsPreview(){
 }
 
 function renderAll(){
+  renderOwnerChips();
+  renderOwnerSelects();
   renderChips('expense', 'chipsExpense');
   renderChips('savings', 'chipsSavings');
   renderChips('invest', 'chipsInvest');
@@ -1111,7 +1192,7 @@ function renderHoldings(){
       : null;
     const pillClass = returnPct === null ? '' : (returnPct >= 0 ? 'good' : 'low');
     return `<tr>
-      <td class="holdings-name">${cat.name} <span class="owner-tag" data-owner="${cat.owner || '공동'}">${cat.owner || '공동'}</span></td>
+      <td class="holdings-name">${cat.name} ${ownerTagHTML(cat.owner)}</td>
       <td>${Number(cat.shares) || 0}주</td>
       <td>${formatWon(cat.costBasis)}</td>
       <td>${latestPrice !== null ? formatWon(latestPrice) : '-'}</td>
@@ -1152,7 +1233,7 @@ function renderHistory(){
         .map(([k,v]) => {
           const catDef = getCatDef(group, k);
           const owner = catDef?.owner || '공동';
-          const ownerTag = `<span class="owner-tag" data-owner="${owner}">${owner}</span>`;
+          const ownerTag = ownerTagHTML(owner);
           if (group === 'invest'){
             const evalAmt = investEval(catDef, v);
             const returnPct = catDef && catDef.costBasis > 0 ? (Number(v) - catDef.costBasis) / catDef.costBasis * 100 : null;
@@ -1285,7 +1366,7 @@ function renderDonut(){
     .map(({ cat, v, color }) => {
       const pct = (v / total * 100).toFixed(0);
       const owner = getCatDef(pieGroup, cat)?.owner;
-      const ownerTag = owner ? `<span class="owner-tag" data-owner="${owner}">${owner}</span>` : '';
+      const ownerTag = owner ? ownerTagHTML(owner) : '';
       return `<div class="pie-legend-item">
         <span class="name"><span class="swatch" style="background:${color}"></span>${cat}${ownerTag}</span>
         <span class="amt">${formatManwon(v)} · ${pct}%</span>
@@ -1373,6 +1454,7 @@ document.getElementById('importFile').addEventListener('change', async (ev) => {
     state = {
       baseAsset: parsed.baseAsset ?? DEFAULT_DATA.baseAsset,
       targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
+      owners: (Array.isArray(parsed.owners) && parsed.owners.length) ? parsed.owners : DEFAULT_DATA.owners,
       categories: normalizeCategories(parsed.categories),
       budgets: {
         expense: parsed.budgets?.expense ?? {},
@@ -1392,7 +1474,14 @@ document.getElementById('importFile').addEventListener('change', async (ev) => {
   }
 });
 
-// enter key adds category
+// enter key adds owner / category
+document.getElementById('newOwnerName').addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter'){
+    ev.preventDefault();
+    addOwner();
+  }
+});
+
 ['newCatExpense','newCatSavings'].forEach(id => {
   document.getElementById(id).addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter'){
