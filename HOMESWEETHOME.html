@@ -421,7 +421,7 @@
           <div class="value" id="statRemaining">-</div>
         </div>
         <div class="stat">
-          <div class="label">평균 월 적립</div>
+          <div class="label">평균 월 순증가</div>
           <div class="value teal" id="statAvg">-</div>
         </div>
         <div class="stat">
@@ -495,7 +495,8 @@
           <div class="field-grid" id="gridSavings"></div>
         </div>
         <div>
-          <div class="field-group-title"><span class="dot invest"></span>투자</div>
+          <div class="field-group-title"><span class="dot invest"></span>투자 (현재 잔고)</div>
+          <div style="font-size:11.5px; color:var(--ink-soft); margin:-6px 0 10px;">이번 달에 넣은 돈이 아니라, 오늘 기준 그 종목의 총 평가금액을 적어주세요. 오르고 내린 만큼은 자동으로 계산돼요.</div>
           <div class="field-grid" id="gridInvest"></div>
         </div>
 
@@ -537,7 +538,7 @@
             <th>월</th>
             <th>수입</th>
             <th>소비</th>
-            <th>저축+투자</th>
+            <th>순증가</th>
             <th>저축률</th>
             <th></th>
             <th></th>
@@ -650,20 +651,37 @@ function showToast(msg){
   setTimeout(()=> t.classList.remove('show'), 1800);
 }
 
-function totalSaved(){
-  return state.entries.reduce((sum, e) =>
-    sum + sumGroup(e.savings) + sumGroup(e.invest), 0);
+// 저축은 매달 쌓이는 돈(누적), 투자는 "오늘 기준 잔고"이므로 전월 대비 증감만 반영한다.
+function sortedEntries(){
+  return [...state.entries].sort((a,b)=> a.month.localeCompare(b.month));
+}
+
+function investDeltaFor(sorted, idx){
+  const cur = sumGroup(sorted[idx].invest);
+  const prev = idx > 0 ? sumGroup(sorted[idx-1].invest) : 0;
+  return cur - prev;
+}
+
+function netContributionFor(sorted, idx){
+  return sumGroup(sorted[idx].savings) + investDeltaFor(sorted, idx);
 }
 
 function currentAsset(){
-  return state.baseAsset + totalSaved();
+  const sorted = sortedEntries();
+  const savingsCum = sorted.reduce((s,e)=> s + sumGroup(e.savings), 0);
+  const investLatest = sorted.length ? sumGroup(sorted[sorted.length-1].invest) : 0;
+  return state.baseAsset + savingsCum + investLatest;
 }
 
 function avgMonthlyContribution(){
-  if (state.entries.length === 0) return 0;
-  const recent = [...state.entries].sort((a,b)=>a.month.localeCompare(b.month)).slice(-6);
-  const sum = recent.reduce((s,e)=> s + sumGroup(e.savings) + sumGroup(e.invest), 0);
-  return sum / recent.length;
+  const sorted = sortedEntries();
+  if (sorted.length === 0) return 0;
+  const startIdx = Math.max(0, sorted.length - 6);
+  let sum = 0;
+  for (let i = startIdx; i < sorted.length; i++){
+    sum += netContributionFor(sorted, i);
+  }
+  return sum / (sorted.length - startIdx);
 }
 
 function buildBuildingSVG(pct){
@@ -698,12 +716,14 @@ function renderChips(group, containerId){
     el.innerHTML = `<span style="font-size:12.5px; color:#9AA2AD;">아직 카테고리가 없어요. 아래에 추가해보세요.</span>`;
     return;
   }
+  const placeholder = group === 'expense' ? '예산' : '목표';
+  const title = group === 'expense' ? '월 예산(만원)' : '목표 금액(만원)';
   el.innerHTML = state.categories[group].map(name => {
     const budget = (state.budgets?.[group] || {})[name] || '';
     return `
     <div class="chip">
       <span>${name}</span>
-      <input type="number" class="chip-budget" min="0" placeholder="예산" title="월 예산(만원)"
+      <input type="number" class="chip-budget" min="0" placeholder="${placeholder}" title="${title}"
         value="${budget}" data-group="${group}" data-cat="${name.replace(/"/g, '&quot;')}">
       <button onclick="removeCategory('${group}', '${name.replace(/'/g, "\\'")}')" title="삭제">×</button>
     </div>`;
@@ -756,13 +776,14 @@ function renderFormGrid(group, containerId){
     el.innerHTML = `<div style="font-size:12.5px; color:#9AA2AD;">위 "카테고리 설정"에서 항목을 먼저 추가해주세요.</div>`;
     return;
   }
+  const budgetLabel = group === 'expense' ? '예산' : '목표';
   el.innerHTML = state.categories[group].map(name => {
     const budget = (state.budgets?.[group] || {})[name];
     return `
     <div class="field">
       <label>${name}</label>
       <input type="number" min="0" placeholder="0" data-group="${group}" data-cat="${name.replace(/"/g, '&quot;')}">
-      ${budget ? `<div class="hint">예산 ${formatManwon(budget)}</div>` : ''}
+      ${budget ? `<div class="hint">${budgetLabel} ${formatManwon(budget)}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -806,14 +827,24 @@ function collectFormGroup(group){
   return out;
 }
 
+function getPreviousInvestTotal(beforeMonth){
+  const prior = state.entries
+    .filter(e => e.month < beforeMonth)
+    .sort((a,b)=> b.month.localeCompare(a.month))[0];
+  return prior ? sumGroup(prior.invest) : 0;
+}
+
 function updateSavingsPreview(){
   const income = Number(document.getElementById('fIncome').value) || 0;
   const savings = sumGroup(collectFormGroup('savings'));
-  const invest = sumGroup(collectFormGroup('invest'));
-  const total = savings + invest;
+  const investNow = sumGroup(collectFormGroup('invest'));
+  const month = document.getElementById('fMonth').value;
+  const investDelta = investNow - (month ? getPreviousInvestTotal(month) : 0);
+  const total = savings + investDelta;
   const rate = income > 0 ? (total/income*100).toFixed(0) : '-';
+  const deltaSign = investDelta >= 0 ? '+' : '-';
   document.getElementById('savingsPreview').innerHTML =
-    `이번 달 저축+투자 <b>${formatManwon(total)}</b> · 저축률 <b>${rate}${rate === '-' ? '' : '%'}</b>`;
+    `이번 달 순증가 <b>${formatManwon(total)}</b> (저축 ${formatManwon(savings)} · 투자 ${deltaSign}${formatManwon(Math.abs(investDelta))}) · 저축률 <b>${rate}${rate === '-' ? '' : '%'}</b>`;
 }
 
 function renderAll(){
@@ -843,7 +874,9 @@ function render(){
   document.getElementById('statCurrent').textContent = formatManwon(current);
   document.getElementById('statTarget').textContent = formatManwon(target);
   document.getElementById('statRemaining').textContent = remaining <= 0 ? '달성!' : formatManwon(remaining);
-  document.getElementById('statAvg').textContent = avg > 0 ? formatManwon(avg) + '/월' : '기록 필요';
+  document.getElementById('statAvg').textContent = state.entries.length === 0
+    ? '기록 필요'
+    : (avg >= 0 ? '+' : '-') + formatManwon(Math.abs(avg)) + '/월';
   document.getElementById('statPct').textContent = pct.toFixed(1) + '%';
 
   let etaText = '-';
@@ -854,6 +887,8 @@ function render(){
     const d = new Date();
     d.setMonth(d.getMonth() + monthsLeft);
     etaText = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')} (${monthsLeft}개월)`;
+  } else if (state.entries.length > 0){
+    etaText = '자산 감소 중';
   } else {
     etaText = '기록 필요';
   }
@@ -879,19 +914,19 @@ function renderHistory(){
     body.innerHTML = `<tr class="empty-row"><td colspan="8">아직 기록이 없어요. 이번 달 내역을 입력해보세요.</td></tr>`;
     return;
   }
-  const sorted = [...state.entries].sort((a,b)=> a.month.localeCompare(b.month));
+  const sorted = sortedEntries();
   let rows = '';
-  sorted.forEach(e => {
+  sorted.forEach((e, idx) => {
     const expenseTotal = sumGroup(e.expense);
-    const savingsInvestTotal = sumGroup(e.savings) + sumGroup(e.invest);
-    const rate = e.income > 0 ? (savingsInvestTotal / e.income * 100) : 0;
+    const netTotal = netContributionFor(sorted, idx);
+    const rate = e.income > 0 ? (netTotal / e.income * 100) : 0;
     const pillClass = rate >= 30 ? 'good' : 'low';
     const isExpanded = expandedMonths.has(e.month);
     rows += `<tr>
       <td class="month">${monthLabel(e.month)}</td>
       <td>${formatManwon(e.income)}</td>
       <td>${formatManwon(expenseTotal)}</td>
-      <td>${formatManwon(savingsInvestTotal)}</td>
+      <td>${formatManwon(netTotal)}</td>
       <td><span class="rate-pill ${pillClass}">${rate.toFixed(0)}%</span></td>
       <td><button class="ghost" style="padding:4px 10px; font-size:11.5px;" onclick="editEntry('${e.month}')">수정</button></td>
       <td><button class="expand-btn" onclick="toggleDetail('${e.month}')">${isExpanded ? '▲' : '▼'}</button></td>
@@ -905,9 +940,13 @@ function renderHistory(){
           const over = group === 'expense' && budget && Number(v) > budget;
           return `<span>${k} <b>${formatManwon(v)}</b>${over ? ' <span style="color:var(--coral); font-size:11px;">초과</span>' : ''}</span>`;
         }).join('');
+      const investDelta = investDeltaFor(sorted, idx);
+      const deltaText = `<span style="color:${investDelta >= 0 ? 'var(--teal)' : 'var(--coral)'}; font-size:11px;">(전월 대비 ${investDelta >= 0 ? '+' : '-'}${formatManwon(Math.abs(investDelta))})</span>`;
       rows += `<tr class="detail-row"><td colspan="8">
         <div class="detail-cats">${catLine(e.expense, 'expense') || '<span>소비 내역 없음</span>'}</div>
-        <div class="detail-cats" style="margin-top:8px;">${catLine(e.savings, 'savings')}${catLine(e.invest, 'invest') || ''}</div>
+        ${catLine(e.savings, 'savings') ? `<div class="detail-cats" style="margin-top:8px;">${catLine(e.savings, 'savings')}</div>` : ''}
+        ${catLine(e.invest, 'invest') ? `<div class="detail-cats" style="margin-top:8px;"><span style="color:var(--ink-soft); font-size:11px;">투자 잔고(평가액)</span> ${deltaText}</div>
+        <div class="detail-cats" style="margin-top:4px;">${catLine(e.invest, 'invest')}</div>` : ''}
       </td></tr>`;
     }
   });
@@ -943,14 +982,18 @@ function renderChart(){
     el.innerHTML = `<div style="color:#9AA2AD; font-size:13px; padding: 40px 0; width:100%; text-align:center;">기록이 쌓이면 여기 그래프가 그려져요</div>`;
     return;
   }
-  const sorted = [...state.entries].sort((a,b)=> a.month.localeCompare(b.month)).slice(-8);
-  const totals = sorted.map(e => sumGroup(e.savings) + sumGroup(e.invest));
-  const maxVal = Math.max(...totals, 1);
-  el.innerHTML = sorted.map((e, i) => {
+  const sorted = sortedEntries();
+  const startIdx = Math.max(0, sorted.length - 8);
+  const displayed = sorted.slice(startIdx);
+  const totals = displayed.map((e, i) => netContributionFor(sorted, startIdx + i));
+  const maxAbs = Math.max(...totals.map(t => Math.abs(t)), 1);
+  el.innerHTML = displayed.map((e, i) => {
     const total = totals[i];
-    const h = Math.max(3, (total/maxVal) * 120);
+    const isNeg = total < 0;
+    const h = Math.max(3, (Math.abs(total)/maxAbs) * 120);
+    const barStyle = isNeg ? `height:${h}px; background: linear-gradient(180deg, var(--coral) 0%, #E28468 100%);` : `height:${h}px;`;
     return `<div class="bar-col">
-      <div class="bar" style="height:${h}px;" title="${formatManwon(total)}"></div>
+      <div class="bar" style="${barStyle}" title="${isNeg ? '-' : '+'}${formatManwon(Math.abs(total))}"></div>
       <div class="bar-label">${monthLabel(e.month)}</div>
     </div>`;
   }).join('');
@@ -1142,6 +1185,8 @@ document.getElementById('importFile').addEventListener('change', async (ev) => {
   const m = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   document.getElementById('fMonth').value = m;
 })();
+
+document.getElementById('fMonth').addEventListener('input', updateSavingsPreview);
 
 loadData();
 </script>
