@@ -577,7 +577,6 @@
         <div class="chip-row" id="chipsExpense"></div>
         <div class="add-cat-row">
           <input type="text" id="newCatExpense" placeholder="예: 육아, 경조사비">
-          <select id="newCatExpenseOwner"></select>
           <button onclick="addCategory('expense')">추가</button>
         </div>
       </div>
@@ -586,7 +585,6 @@
         <div class="chip-row" id="chipsSavings"></div>
         <div class="add-cat-row">
           <input type="text" id="newCatSavings" placeholder="예: 비상금 통장">
-          <select id="newCatSavingsOwner"></select>
           <button onclick="addCategory('savings')">추가</button>
         </div>
       </div>
@@ -595,7 +593,6 @@
         <div class="chip-row" id="chipsInvest"></div>
         <div class="add-cat-row">
           <input type="text" id="newCatInvest" placeholder="예: 미국 주식, 한국 주식, ETF">
-          <select id="newCatInvestOwner"></select>
           <button onclick="addCategory('invest')">추가</button>
         </div>
       </div>
@@ -620,10 +617,44 @@
         <div class="tab-row" id="entryTabs"></div>
 
         <div class="entry-tab-panel" data-tab="expense">
-          <div class="field-grid" id="gridExpense"></div>
+          <div class="holdings-note">항목·보유자·카테고리를 표에서 바로 수정할 수 있어요. 금액은 만원 단위로 입력해주세요.</div>
+          <div style="overflow-x:auto;">
+            <table class="holdings-table">
+              <thead>
+                <tr>
+                  <th>보유자</th>
+                  <th>카테고리</th>
+                  <th>항목</th>
+                  <th>금액(만원)</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="expenseItemsBody"></tbody>
+            </table>
+          </div>
+          <div style="margin-top:12px;">
+            <button type="button" class="ghost" style="font-size:12.5px; padding:7px 14px;" onclick="addItem('expense')">+ 항목 추가</button>
+          </div>
         </div>
         <div class="entry-tab-panel" data-tab="savings">
-          <div class="field-grid" id="gridSavings"></div>
+          <div class="holdings-note">항목·보유자·카테고리를 표에서 바로 수정할 수 있어요. 금액은 만원 단위로 입력해주세요.</div>
+          <div style="overflow-x:auto;">
+            <table class="holdings-table">
+              <thead>
+                <tr>
+                  <th>보유자</th>
+                  <th>카테고리</th>
+                  <th>항목</th>
+                  <th>금액(만원)</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="savingsItemsBody"></tbody>
+            </table>
+          </div>
+          <div style="margin-top:12px;">
+            <button type="button" class="ghost" style="font-size:12.5px; padding:7px 14px;" onclick="addItem('savings')">+ 항목 추가</button>
+          </div>
         </div>
         <div class="entry-tab-panel" data-tab="invest">
           <div class="holdings-note">종목·수량·단가를 표에서 바로 수정할 수 있어요. 평가금액과 수익률은 보유수량 × 현재가로 자동 계산돼요.</div>
@@ -764,7 +795,11 @@ const DEFAULT_DATA = {
   categories: {
     expense: [],
     savings: [],
-    invest: []   // 투자 대분류 버킷 {name, owner} (예: 미국 주식, ETF)
+    invest: []   // 대분류 {name} (예: 미국 주식, ETF)
+  },
+  items: {       // 소비/저축 개별 항목 {id, owner, category, name}
+    expense: [],
+    savings: []
   },
   holdings: [],  // 개별 종목 {id, owner, category, name, shares, costBasis(원)}
   budgets: { // {group: {cat: monthlyBudgetInManwon}}
@@ -845,6 +880,18 @@ function normalizeCategories(cats){
   };
 }
 
+// 구버전(카테고리에 직접 금액 입력) 소비/저축 데이터를 항목(items) 구조로 이전.
+// 항목 id를 기존 카테고리명 그대로 쓰기 때문에 과거 월별 금액 기록도 그대로 연결된다.
+function migrateItems(parsed){
+  if (parsed.items && Array.isArray(parsed.items.expense)) return parsed.items; // 이미 새 구조
+  const mk = (group) => (parsed.categories?.[group] || []).map(c => {
+    const name = typeof c === 'string' ? c : c.name;
+    const owner = (typeof c === 'object' && c.owner) || '공동';
+    return { id: name, owner, category: name, name };
+  });
+  return { expense: mk('expense'), savings: mk('savings') };
+}
+
 // 구버전(종목 = 투자 카테고리, 수량/단가 포함) 데이터를 새 구조(대분류 + holdings)로 이전.
 // 이전된 종목의 id를 기존 종목명 그대로 쓰기 때문에 과거 월별 현재가 기록도 그대로 연결된다.
 function migrateHoldings(parsed){
@@ -873,11 +920,13 @@ function sumGroup(obj){
 // 저장된 JSON을 현재 state로 변환 (localStorage / 클라우드 공통)
 function hydrateState(parsed){
   if (!parsed || typeof parsed !== 'object') return;
-  const holdings = migrateHoldings(parsed); // categories/budgets 수정 전에 먼저 실행
+  const items = migrateItems(parsed);       // categories 수정 전에 먼저 실행
+  const holdings = migrateHoldings(parsed);
   state = {
     targetAsset: parsed.targetAsset ?? DEFAULT_DATA.targetAsset,
     owners: (Array.isArray(parsed.owners) && parsed.owners.length) ? parsed.owners : DEFAULT_DATA.owners,
     categories: normalizeCategories(parsed.categories),
+    items,
     holdings,
     budgets: {
       expense: parsed.budgets?.expense ?? {},
@@ -995,14 +1044,6 @@ function renderOwnerChips(){
   }).join('');
 }
 
-function renderOwnerSelects(){
-  ['newCatExpenseOwner', 'newCatSavingsOwner', 'newCatInvestOwner'].forEach(id => {
-    const sel = document.getElementById(id);
-    const keep = state.owners.includes(sel.value) ? sel.value : (state.owners[0] || '공동');
-    sel.innerHTML = state.owners.map(o => `<option value="${o}" ${o === keep ? 'selected' : ''}>${o}</option>`).join('');
-  });
-}
-
 async function addOwner(){
   const input = document.getElementById('newOwnerName');
   const name = input.value.trim();
@@ -1015,7 +1056,6 @@ async function addOwner(){
   input.value = '';
   await saveData();
   renderOwnerChips();
-  renderOwnerSelects();
   showToast(`"${name}" 보유자를 추가했어요`);
 }
 window.addOwner = addOwner;
@@ -1025,7 +1065,6 @@ async function removeOwner(name){
   state.owners = state.owners.filter(o => o !== name);
   await saveData();
   renderOwnerChips();
-  renderOwnerSelects();
   showToast(`"${name}" 보유자를 삭제했어요`);
 }
 window.removeOwner = removeOwner;
@@ -1044,7 +1083,6 @@ function renderChips(group, containerId){
     return `
     <div class="chip">
       <span>${cat.name}</span>
-      ${ownerTagHTML(cat.owner)}
       <input type="number" class="chip-budget" min="0" placeholder="${placeholder}" title="${title}"
         value="${budget}" data-group="${group}" data-cat="${cat.name.replace(/"/g, '&quot;')}">
       <button onclick="removeCategory('${group}', '${cat.name.replace(/'/g, "\\'")}')" title="삭제">×</button>
@@ -1062,26 +1100,19 @@ document.addEventListener('change', async (ev) => {
   if (val > 0) state.budgets[group][cat] = val;
   else delete state.budgets[group][cat];
   await saveData();
-  if (group === 'invest'){
-    renderBudgetSection();
-  } else {
-    const containerId = { expense:'gridExpense', savings:'gridSavings' }[group];
-    reRenderFormGridPreserving(group, containerId);
-  }
+  renderBudgetSection();
 });
 
 async function addCategory(group){
   const inputId = { expense: 'newCatExpense', savings: 'newCatSavings', invest: 'newCatInvest' }[group];
-  const ownerId = { expense: 'newCatExpenseOwner', savings: 'newCatSavingsOwner', invest: 'newCatInvestOwner' }[group];
   const input = document.getElementById(inputId);
-  const ownerSel = document.getElementById(ownerId);
   const name = input.value.trim();
   if (!name) return;
   if (state.categories[group].some(c => c.name === name)){
     showToast('이미 있는 카테고리예요');
     return;
   }
-  state.categories[group].push({ name, owner: ownerSel.value });
+  state.categories[group].push({ name });
   input.value = '';
   await saveData();
   renderAll();
@@ -1097,93 +1128,126 @@ async function removeCategory(group, name){
 }
 window.removeCategory = removeCategory;
 
-// ---- dynamic entry form ----
-function renderFormGrid(group, containerId){
-  const el = document.getElementById(containerId);
-  if (state.categories[group].length === 0){
-    el.innerHTML = `<div style="font-size:12.5px; color:#9AA2AD;">위 "카테고리 설정"에서 항목을 먼저 추가해주세요.</div>`;
+// ---- dynamic entry form (소비/저축 항목 표) ----
+function getItem(group, id){
+  return (state.items[group] || []).find(x => x.id === id);
+}
+
+function itemRowHTML(group, item){
+  const ownerList = state.owners.includes(item.owner) ? state.owners : [item.owner, ...state.owners];
+  const ownerOpts = ownerList.map(o => `<option value="${o}" ${o === item.owner ? 'selected' : ''}>${o}</option>`).join('');
+  const catNames = state.categories[group].map(c => c.name);
+  const catList = (item.category && !catNames.includes(item.category)) ? [item.category, ...catNames] : catNames;
+  const catOpts = catList.map(c => `<option value="${c}" ${c === item.category ? 'selected' : ''}>${c}</option>`).join('');
+  return `<tr>
+    <td><select class="item-field" data-gtype="${group}" data-id="${item.id}" data-field="owner">${ownerOpts}</select></td>
+    <td><select class="item-field" data-gtype="${group}" data-id="${item.id}" data-field="category">${catOpts}</select></td>
+    <td><input type="text" class="item-field" data-gtype="${group}" data-id="${item.id}" data-field="name" value="${(item.name || '').replace(/"/g, '&quot;')}" placeholder="항목명"></td>
+    <td><input type="number" min="0" placeholder="0" data-group="${group}" data-cat="${item.id}"></td>
+    <td><button type="button" class="danger-ghost" style="padding:3px 8px;" onclick="removeItem('${group}','${item.id}')">삭제</button></td>
+  </tr>`;
+}
+
+function renderItemsTable(group){
+  const body = document.getElementById(group === 'expense' ? 'expenseItemsBody' : 'savingsItemsBody');
+  const items = state.items[group] || [];
+  if (!items.length){
+    body.innerHTML = `<tr class="empty-row"><td colspan="5">아직 항목이 없어요. 아래 "+ 항목 추가"를 눌러 시작하세요.</td></tr>`;
     return;
   }
-  const budgetLabel = group === 'expense' ? '예산' : '목표';
-  el.innerHTML = state.categories[group].map(cat => {
-    const budget = (state.budgets?.[group] || {})[cat.name] || 0;
-    return `
-    <div class="field">
-      <label>${cat.name} ${ownerTagHTML(cat.owner)}</label>
-      <input type="number" min="0" placeholder="0" data-group="${group}" data-cat="${cat.name.replace(/"/g, '&quot;')}" data-budget="${budget}">
-      <div class="hint">${budget ? `${budgetLabel} ${formatManwon(budget)}` : ''}</div>
-    </div>`;
-  }).join('');
-}
-
-function applyBudgetStyle(inp){
-  const group = inp.dataset.group;
-  const cat = inp.dataset.cat;
-  inp.classList.remove('over-budget', 'goal-met');
-  if (!group || !cat) return;
-  const budget = (state.budgets?.[group] || {})[cat];
-  if (!budget) return;
-  const val = Number(inp.value) || 0;
-  if (val <= 0) return;
-  if (group === 'expense'){
-    if (val > budget) inp.classList.add('over-budget');
-  } else {
-    if (val >= budget) inp.classList.add('goal-met');
-  }
-}
-
-// 소비/저축 탭에서 예산·목표 대비 이번 달 잔여 금액을 실시간으로 보여준다.
-function updateBudgetRemaining(inp){
-  if (inp.dataset.group !== 'expense' && inp.dataset.group !== 'savings') return;
-  const hintEl = inp.parentElement.querySelector('.hint');
-  if (!hintEl) return;
-  const budget = Number(inp.dataset.budget) || 0;
-  const budgetLabel = inp.dataset.group === 'expense' ? '예산' : '목표';
-  if (!budget){ hintEl.textContent = ''; return; }
-  const entered = Number(inp.value) || 0;
-  const remaining = budget - entered;
-  const pct = Math.abs(remaining / budget * 100);
-  const remainText = remaining >= 0
-    ? `잔여 ${formatManwon(remaining)} (${pct.toFixed(0)}%)`
-    : `${formatManwon(Math.abs(remaining))} 초과 (${pct.toFixed(0)}%)`;
-  const color = remaining >= 0 ? 'var(--ink-soft)' : 'var(--coral)';
-  hintEl.innerHTML = `${budgetLabel} ${formatManwon(budget)} · <span style="color:${color};">${remainText}</span>`;
-}
-
-function reRenderFormGridPreserving(group, containerId){
-  const el = document.getElementById(containerId);
-  const prevValues = {};
-  el.querySelectorAll('input[data-cat]').forEach(inp => { prevValues[inp.dataset.cat] = inp.value; });
-  renderFormGrid(group, containerId);
-  el.querySelectorAll('input[data-cat]').forEach(inp => {
-    if (prevValues[inp.dataset.cat] !== undefined) inp.value = prevValues[inp.dataset.cat];
-    inp.addEventListener('input', () => { updateSavingsPreview(); applyBudgetStyle(inp); updateBudgetRemaining(inp); });
-    applyBudgetStyle(inp);
-    updateBudgetRemaining(inp);
+  const byOwner = {};
+  items.forEach(it => {
+    const o = it.owner || '공동';
+    (byOwner[o] = byOwner[o] || []).push(it);
   });
+  let rows = '';
+  Object.keys(byOwner).forEach(owner => {
+    const oKey = group + '|' + owner;
+    const oCollapsed = collapsedGroups.has(oKey);
+    rows += `<tr class="group-row" onclick="toggleGroup('${oKey.replace(/'/g, "\\'")}')">
+      <td colspan="5"><span class="caret">${oCollapsed ? '▶' : '▼'}</span>${owner} <span style="font-weight:400; color:var(--ink-soft);">(${byOwner[owner].length}항목)</span></td>
+    </tr>`;
+    if (oCollapsed) return;
+    const byCat = {};
+    byOwner[owner].forEach(it => {
+      const c = it.category || '미분류';
+      (byCat[c] = byCat[c] || []).push(it);
+    });
+    Object.keys(byCat).forEach(cat => {
+      const cKey = oKey + '|' + cat;
+      const cCollapsed = collapsedGroups.has(cKey);
+      rows += `<tr class="group-row lvl2" onclick="toggleGroup('${cKey.replace(/'/g, "\\'")}')">
+        <td colspan="5"><span class="caret">${cCollapsed ? '▶' : '▼'}</span>${cat}</td>
+      </tr>`;
+      if (cCollapsed) return;
+      byCat[cat].forEach(it => { rows += itemRowHTML(group, it); });
+    });
+  });
+  body.innerHTML = rows;
 }
 
-function reRenderHoldingsPreserving(){
-  const body = document.getElementById('holdingsBody');
-  const prevValues = {};
-  body.querySelectorAll('input[data-cat]').forEach(inp => { prevValues[inp.dataset.cat] = inp.value; });
-  renderHoldings();
-  body.querySelectorAll('input[data-cat]').forEach(inp => {
-    if (prevValues[inp.dataset.cat] !== undefined) inp.value = prevValues[inp.dataset.cat];
-    inp.addEventListener('input', () => { updateSavingsPreview(); applyBudgetStyle(inp); updateHoldingLive(inp); });
-    applyBudgetStyle(inp);
+async function addItem(group){
+  const owner = state.owners[0] || '공동';
+  const category = state.categories[group][0]?.name || '';
+  state.items[group].push({ id: genId(), owner, category, name: '' });
+  await saveData();
+  reRenderItemsPreserving(group);
+}
+window.addItem = addItem;
+
+async function removeItem(group, id){
+  const it = getItem(group, id);
+  if (!it) return;
+  if (!confirm(`"${it.name || '이 항목'}"을(를) 삭제할까요? 과거 월별 금액 기록도 함께 지워져요.`)) return;
+  state.items[group] = state.items[group].filter(x => x.id !== id);
+  state.entries.forEach(e => { if (e[group]) delete e[group][id]; });
+  await saveData();
+  render();
+  showToast('항목을 삭제했어요');
+}
+window.removeItem = removeItem;
+
+// 표 안의 항목 속성(보유자/카테고리/항목명) 수정 처리
+document.addEventListener('change', async (ev) => {
+  const el = ev.target;
+  if (!el.classList.contains('item-field')) return;
+  const group = el.dataset.gtype;
+  const it = getItem(group, el.dataset.id);
+  if (!it) return;
+  it[el.dataset.field] = el.value;
+  await saveData();
+  reRenderItemsPreserving(group);
+  renderBudgetSection();
+});
+
+function bindAmountInputs(root){
+  root.querySelectorAll('input[data-cat]').forEach(inp => {
+    const key = inp.dataset.group + '|' + inp.dataset.cat;
+    inp.value = pendingAmounts[key] ?? '';
+    inp.addEventListener('input', () => {
+      pendingAmounts[key] = inp.value;
+      updateSavingsPreview();
+      updateHoldingLive(inp);
+    });
     updateHoldingLive(inp);
   });
 }
 
+function reRenderItemsPreserving(group){
+  renderItemsTable(group);
+  bindAmountInputs(document.getElementById(group === 'expense' ? 'expenseItemsBody' : 'savingsItemsBody'));
+}
+
+function reRenderHoldingsPreserving(){
+  renderHoldings();
+  bindAmountInputs(document.getElementById('holdingsBody'));
+}
+
+// 접힌 그룹의 입력값도 놓치지 않도록 DOM이 아니라 pendingAmounts에서 수집한다
 function collectFormGroup(group){
-  const inputs = document.querySelectorAll('.entry-form input[data-group]');
+  const defs = group === 'invest' ? state.holdings : (state.items[group] || []);
   const out = {};
-  inputs.forEach(inp => {
-    if (inp.dataset.group === group){
-      out[inp.dataset.cat] = Number(inp.value) || 0;
-    }
-  });
+  defs.forEach(d => { out[d.id] = Number(pendingAmounts[group + '|' + d.id]) || 0; });
   return out;
 }
 
@@ -1230,26 +1294,15 @@ function updateEntryTabVisibility(){
 
 function renderAll(){
   renderOwnerChips();
-  renderOwnerSelects();
   renderChips('expense', 'chipsExpense');
   renderChips('savings', 'chipsSavings');
   renderChips('invest', 'chipsInvest');
-  renderFormGrid('expense', 'gridExpense');
-  renderFormGrid('savings', 'gridSavings');
+  renderItemsTable('expense');
+  renderItemsTable('savings');
   renderHoldings();
   renderEntryTabs();
   updateEntryTabVisibility();
-  document.querySelectorAll('.entry-form input[type=number]').forEach(inp => {
-    inp.addEventListener('input', () => {
-      updateSavingsPreview();
-      applyBudgetStyle(inp);
-      updateBudgetRemaining(inp);
-      updateHoldingLive(inp);
-    });
-    applyBudgetStyle(inp);
-    updateBudgetRemaining(inp);
-    updateHoldingLive(inp);
-  });
+  bindAmountInputs(document.querySelector('.entry-form'));
   updateSavingsPreview();
 }
 
@@ -1297,23 +1350,21 @@ function updateHoldingLive(inp){
   }
 }
 
-// 보유자(1차) / 투자 카테고리(2차) 접기 상태
-let collapsedOwners = new Set();
-let collapsedCats = new Set(); // key: owner + '|' + category
+// 모든 표 공통 접기 상태 — key: group|owner 또는 group|owner|category
+let collapsedGroups = new Set();
 
-function toggleOwnerGroup(owner){
-  if (collapsedOwners.has(owner)) collapsedOwners.delete(owner);
-  else collapsedOwners.add(owner);
-  reRenderHoldingsPreserving();
-}
-window.toggleOwnerGroup = toggleOwnerGroup;
+// 입력 중인 이번 달 금액/현재가 — 그룹을 접거나 표를 다시 그려도 값이 유지되도록
+// DOM이 아니라 여기 보관한다. key: group|itemId
+let pendingAmounts = {};
 
-function toggleCatGroup(key){
-  if (collapsedCats.has(key)) collapsedCats.delete(key);
-  else collapsedCats.add(key);
-  reRenderHoldingsPreserving();
+function toggleGroup(key){
+  if (collapsedGroups.has(key)) collapsedGroups.delete(key);
+  else collapsedGroups.add(key);
+  const group = key.split('|')[0];
+  if (group === 'invest') reRenderHoldingsPreserving();
+  else reRenderItemsPreserving(group);
 }
-window.toggleCatGroup = toggleCatGroup;
+window.toggleGroup = toggleGroup;
 
 async function addHolding(){
   const owner = state.owners[0] || '공동';
@@ -1398,8 +1449,9 @@ function renderHoldings(){
 
   let rows = '';
   Object.keys(byOwner).forEach(owner => {
-    const ownerCollapsed = collapsedOwners.has(owner);
-    rows += `<tr class="group-row" onclick="toggleOwnerGroup('${owner.replace(/'/g, "\\'")}')">
+    const oKey = 'invest|' + owner;
+    const ownerCollapsed = collapsedGroups.has(oKey);
+    rows += `<tr class="group-row" onclick="toggleGroup('${oKey.replace(/'/g, "\\'")}')">
       <td colspan="9"><span class="caret">${ownerCollapsed ? '▶' : '▼'}</span>${owner} <span style="font-weight:400; color:var(--ink-soft);">(${byOwner[owner].length}종목)</span></td>
     </tr>`;
     if (ownerCollapsed) return;
@@ -1409,9 +1461,9 @@ function renderHoldings(){
       (byCat[c] = byCat[c] || []).push(h);
     });
     Object.keys(byCat).forEach(cat => {
-      const key = owner + '|' + cat;
-      const catCollapsed = collapsedCats.has(key);
-      rows += `<tr class="group-row lvl2" onclick="toggleCatGroup('${key.replace(/'/g, "\\'")}')">
+      const cKey = oKey + '|' + cat;
+      const catCollapsed = collapsedGroups.has(cKey);
+      rows += `<tr class="group-row lvl2" onclick="toggleGroup('${cKey.replace(/'/g, "\\'")}')">
         <td colspan="9"><span class="caret">${catCollapsed ? '▶' : '▼'}</span>${cat}</td>
       </tr>`;
       if (catCollapsed) return;
@@ -1453,12 +1505,16 @@ function editEntry(month){
   if (!e) return;
   document.getElementById('fMonth').value = e.month;
   document.getElementById('fIncome').value = e.income;
-  document.querySelectorAll('.entry-form input[data-group]').forEach(inp => {
-    const val = (e[inp.dataset.group] || {})[inp.dataset.cat];
-    inp.value = val || '';
-    applyBudgetStyle(inp);
+  pendingAmounts = {};
+  ['expense', 'savings'].forEach(g => (state.items[g] || []).forEach(it => {
+    const v = (e[g] || {})[it.id];
+    if (v) pendingAmounts[g + '|' + it.id] = String(v);
+  }));
+  state.holdings.forEach(h => {
+    const v = (e.invest || {})[h.id];
+    if (v) pendingAmounts['invest|' + h.id] = String(v);
   });
-  updateSavingsPreview();
+  renderAll(); // pendingAmounts 기준으로 입력칸 다시 채움
   document.getElementById('entryForm').scrollIntoView({ behavior:'smooth', block:'start' });
   showToast(`${monthLabel(month)} 데이터를 불러왔어요. 수정 후 저장하세요.`);
 }
@@ -1540,6 +1596,15 @@ function renderDonut(){
       const cat = h.category || '미분류';
       data[cat] = (data[cat] || 0) + investEval(h, price);
     });
+  } else {
+    // 소비/저축도 개별 항목이 아니라 카테고리 단위로 합산
+    data = {};
+    Object.entries(rawData).forEach(([id, amt]) => {
+      const it = getItem(pieGroup, id);
+      if (!it) return;
+      const cat = it.category || '미분류';
+      data[cat] = (data[cat] || 0) + (Number(amt) || 0);
+    });
   }
   const filtered = Object.entries(data).filter(([,v]) => Number(v) > 0);
   const total = filtered.reduce((s,[,v]) => s + Number(v), 0);
@@ -1616,30 +1681,33 @@ function renderBudgetStatus(){
   const entry = state.entries.find(e => e.month === sel.value);
   const groupLabels = { expense: '소비', savings: '저축', invest: '투자' };
   const rows = [];
+  const ownerMatch = (o) => budgetOwnerFilter === '전체' || (o || '공동') === budgetOwnerFilter;
   ['expense', 'savings', 'invest'].forEach(group => {
     state.categories[group].forEach(cat => {
       const budget = (state.budgets?.[group] || {})[cat.name];
       if (!budget) return;
-      const owner = cat.owner || '공동';
-      if (budgetOwnerFilter !== '전체' && owner !== budgetOwnerFilter) return;
+      // 보유자를 선택하면 그 보유자의 항목/종목 실적만 합산해서 보여준다 (예산은 카테고리 전체 기준)
       let actual = 0;
       if (group === 'invest'){
-        // 이 대분류에 속한 종목들의 평가금액 합산 (만원)
         const prices = (entry && entry.invest) || {};
         state.holdings.forEach(h => {
-          if ((h.category || '미분류') === cat.name && prices[h.id] !== undefined){
+          if ((h.category || '미분류') === cat.name && ownerMatch(h.owner) && prices[h.id] !== undefined){
             actual += investEval(h, prices[h.id]);
           }
         });
       } else {
-        const raw = entry ? entry[group]?.[cat.name] : undefined;
-        actual = raw !== undefined && raw !== '' ? Number(raw) : 0;
+        const amounts = (entry && entry[group]) || {};
+        (state.items[group] || []).forEach(it => {
+          if ((it.category || '미분류') === cat.name && ownerMatch(it.owner) && amounts[it.id] !== undefined){
+            actual += Number(amounts[it.id]) || 0;
+          }
+        });
       }
       const formatter = formatManwon;
       const remaining = budget - actual;
       const pct = Math.min(100, Math.max(0, (actual / budget) * 100));
       const over = group === 'expense' ? actual > budget : actual >= budget;
-      rows.push({ group, cat, owner, budget, actual, remaining, pct, over, formatter });
+      rows.push({ group, cat, budget, actual, remaining, pct, over, formatter });
     });
   });
 
@@ -1651,7 +1719,7 @@ function renderBudgetStatus(){
   body.innerHTML = rows.map(r => {
     const pillClass = r.group === 'expense' ? (r.over ? 'low' : 'good') : (r.over ? 'good' : 'low');
     return `<tr>
-      <td class="month">${r.cat.name} ${ownerTagHTML(r.owner)}</td>
+      <td class="month">${r.cat.name}</td>
       <td><span class="dot ${r.group}"></span> ${groupLabels[r.group]}</td>
       <td>${r.formatter(r.budget)}</td>
       <td>${r.formatter(r.actual)}</td>
@@ -1689,6 +1757,7 @@ document.getElementById('entryForm').addEventListener('submit', async (ev) => {
   };
   state.entries = state.entries.filter(e => e.month !== month);
   state.entries.push(entry);
+  pendingAmounts = {};
   await saveData();
   render();
   showToast(`${monthLabel(month)} 기록을 저장했어요`);
